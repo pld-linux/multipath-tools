@@ -1,5 +1,6 @@
-#
+# TODO: optflags
 Summary:	Linux multipath implementation
+Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.3.3
 Release:	1
@@ -13,17 +14,18 @@ BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 %description
 The Linux multipath implementation.
 
+%description -l pl
+Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
+
 %prep
 %setup -q
 
 %build
-
 %{__make}
 
 %install
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT{%{_sbindir},%{_mandir}/man{5,8},/etc/{rc.d/init.d,sysconfig}}
-
 
 %clean
 rm -rf $RPM_BUILD_ROOT
