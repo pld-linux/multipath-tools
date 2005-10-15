@@ -2,14 +2,17 @@
 Summary:	Linux multipath implementation
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
-Version:	0.3.3
-Release:	1
+Version:	0.4.5
+Release:	0.1
 License:	GPL
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
-# Source0-md5:	8d5df5c448f4ded19be256b0d870e9be
+# Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
 URL:		http://christophe.varoqui.free.fr/
+BuildRequires:	sysfsutils >= 1.3.0-1.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
+
+%define		_sbindir /sbin
 
 %description
 The Linux multipath implementation.
@@ -21,39 +24,33 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 %setup -q
 
 %build
-%{__make}
+%{__make} -j1
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT{%{_sbindir},%{_mandir}/man{5,8},/etc/{rc.d/init.d,sysconfig}}
+%{__make} install \
+	DESTDIR=$RPM_BUILD_ROOT
 
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%post
-/sbin/chkconfig --add %{name}
-if [ -f /var/lock/subsys/mdadm ]; then
-	/etc/rc.d/init.d/mdadm restart 1>&2
-else
-	echo "Run \"/etc/rc.d/init.d/mdadm start\" to start RAID monitoring."
-fi
-
-%preun
-if [ "$1" = "0" ]; then
-	if [ -f /var/lock/subsys/mdadm ]; then
-		/etc/rc.d/init.d/mdadm stop 1>&2
-	fi
-	/sbin/chkconfig --del mdadm
-fi
-
 %files
 %defattr(644,root,root,755)
-%doc ANNOUNCE* TODO
-%attr(755,root,root) %{_sbindir}/*
-%attr(640,root,root) %config(noreplace,missingok) %verify(not md5 size mtime) %{_sysconfdir}/mdadm.conf
-%{_mandir}/man?/*
-%attr(754,root,root) /etc/rc.d/init.d/%{name}
-%attr(640,root,root) %config(noreplace) %verify(not md5 size mtime) /etc/sysconfig/%{name}
+%{_sysconfdir}/dev.d/block/multipath.dev
+%{_sysconfdir}/udev/rules.d/multipath.rules
+%attr(755,root,root) %{_sbindir}/devmap_name
+%attr(755,root,root) %{_sbindir}/kpartx
+%attr(755,root,root) %{_sbindir}/mpath_prio_alua
+%attr(755,root,root) %{_sbindir}/mpath_prio_emc
+%attr(755,root,root) %{_sbindir}/multipath
+%attr(755,root,root) %{_sbindir}/pp_balance_units
+%attr(755,root,root) %{_bindir}/multipathd
+%{_mandir}/man8/devmap_name.8*
+%{_mandir}/man8/kpartx.8*
+%{_mandir}/man8/mpath_prio_alua.8*
+%{_mandir}/man8/multipath.8*
+%{_mandir}/man8/multipathd.8*
+
 %if %{with initrd}
 %exclude %{_sbindir}/initrd-*
 
