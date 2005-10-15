@@ -1,9 +1,8 @@
-# TODO: optflags
 Summary:	Tools to manage multipathed devices with the device-mapper.
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.4.5
-Release:	0.2
+Release:	0.3
 License:	GPL
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -36,6 +35,7 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 %prep
 %setup -q
 %patch0 -p1
+mv kpartx/README README.kpartx
 
 %build
 %{__make} -j1 \
@@ -56,6 +56,7 @@ rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(644,root,root,755)
+%doc AUTHOR ChangeLog FAQ README* TODO
 %{_sysconfdir}/udev/rules.d/*.rules
 %attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
