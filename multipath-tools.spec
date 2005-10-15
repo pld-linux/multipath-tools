@@ -9,6 +9,7 @@ Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
 URL:		http://christophe.varoqui.free.fr/
+Patch0:		%{name}-bashism.patch
 BuildRequires:	sysfsutils >= 1.3.0-1.1
 Requires:	udev >= 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
@@ -31,9 +32,11 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 
 %prep
 %setup -q
+%patch0 -p1
 
 %build
-%{__make} -j1
+%{__make} -j1 \
+	CC="%{__cc}"
 
 %install
 rm -rf $RPM_BUILD_ROOT
