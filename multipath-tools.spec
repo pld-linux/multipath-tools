@@ -3,7 +3,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper.
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.4.5
-Release:	0.1
+Release:	0.2
 License:	GPL
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -44,13 +44,15 @@ rm -rf $RPM_BUILD_ROOT
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
+mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
+rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
+
 %clean
 rm -rf $RPM_BUILD_ROOT
 
 %files
 %defattr(644,root,root,755)
-%{_sysconfdir}/dev.d/block/multipath.dev
-%{_sysconfdir}/udev/rules.d/multipath.rules
+%{_sysconfdir}/udev/rules.d/*.rules
 %attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) %{_sbindir}/mpath_prio_alua
