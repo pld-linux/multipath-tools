@@ -2,7 +2,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper.
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.4.5
-Release:	0.3
+Release:	0.4
 License:	GPL
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -10,6 +10,7 @@ Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.ta
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-optflags.patch
 Patch1:		%{name}-bashism.patch
+Patch2:		%{name}-udev.patch
 BuildRequires:	readline-devel
 BuildRequires:	device-mapper-devel >= 1.01.01
 BuildRequires:	sysfsutils >= 1.3.0-1.1
@@ -37,6 +38,7 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 %setup -q
 %patch0 -p1
 %patch1 -p1
+%patch2 -p1
 mv kpartx/README README.kpartx
 
 %build
