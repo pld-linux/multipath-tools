@@ -11,6 +11,7 @@ Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.ta
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-bashism.patch
 BuildRequires:	readline-devel
+BuildRequires:	device-mapper-devel > 1.00.19
 BuildRequires:	sysfsutils >= 1.3.0-1.1
 Requires:	udev >= 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
