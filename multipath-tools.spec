@@ -16,7 +16,8 @@ BuildRequires:	sysfsutils >= 1.3.0-1.1
 Requires:	udev >= 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
-%define		_sbindir /sbin
+%define		_sbindir	/sbin
+%define		_bindir		%{_prefix}/sbin
 
 %description
 multipath-tools provides the tools to manage multipathed devices by
@@ -42,9 +43,11 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 
 %install
 rm -rf $RPM_BUILD_ROOT
+install -d $RPM_BUILD_ROOT%{_bindir}
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
+mv $RPM_BUILD_ROOT{%{_prefix}/bin,%{_bindir}}/multipathd
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
