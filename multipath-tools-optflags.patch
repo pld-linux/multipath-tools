@@ -1,0 +1,104 @@
+diff -u -r ../multipath-tools-0.4.5.orig/devmap_name/Makefile ./devmap_name/Makefile
+--- ../multipath-tools-0.4.5.orig/devmap_name/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./devmap_name/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -6,7 +6,8 @@
+ include ../Makefile.inc
+ 
+ OBJS = devmap_name.o
+-CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes
++OPTFLAGS = -pipe -g -Wall
++CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes
+ 
+ ifeq ($(strip $(BUILD)),klibc)
+ 	OBJS += $(libdm)
+diff -u -r ../multipath-tools-0.4.5.orig/kpartx/Makefile ./kpartx/Makefile
+--- ../multipath-tools-0.4.5.orig/kpartx/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./kpartx/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -6,7 +6,8 @@
+ 
+ include ../Makefile.inc
+ 
+-CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes -I.
++OPTFLAGS = -pipe -g -Wall
++CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes -I.
+ 
+ ifeq ($(strip $(BUILD)),klibc)
+ 	OBJS = bsd.o dos.o kpartx.o solaris.o unixware.o gpt.o crc32.o \
+diff -u -r ../multipath-tools-0.4.5.orig/libmultipath/Makefile ./libmultipath/Makefile
+--- ../multipath-tools-0.4.5.orig/libmultipath/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./libmultipath/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -12,7 +12,8 @@
+        pgpolicies.o debug.o regex.o defaults.o uevent.o \
+        switchgroup.o uxsock.o print.o
+ 
+-CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes
++OPTFLAGS = -pipe -g -Wall
++CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes
+ 
+ ifeq ($(strip $(DAEMON)),1)
+ 	CFLAGS += -DDAEMON
+diff -u -r ../multipath-tools-0.4.5.orig/multipath/Makefile ./multipath/Makefile
+--- ../multipath-tools-0.4.5.orig/multipath/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./multipath/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -7,7 +7,8 @@
+ 
+ OBJS = main.o $(MULTIPATHLIB)-$(BUILD).a $(CHECKERSLIB)-$(BUILD).a
+ 
+-CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes \
++OPTFLAGS = -pipe -g -Wall
++CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes \
+ 	 -I$(multipathdir) -I$(checkersdir)
+ 
+ ifeq ($(strip $(BUILD)),klibc)
+diff -u -r ../multipath-tools-0.4.5.orig/multipathd/Makefile ./multipathd/Makefile
+--- ../multipath-tools-0.4.5.orig/multipathd/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./multipathd/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -13,7 +13,8 @@
+ #
+ # basic flags setting
+ #
+-CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes \
++OPTFLAGS = -pipe -g -Wall
++CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes \
+ 	 -DDAEMON -I$(multipathdir) -I$(checkersdir)
+ LDFLAGS = -lpthread -ldevmapper -lsysfs -lreadline -lcurses
+ 
+diff -u -r ../multipath-tools-0.4.5.orig/path_priority/pp_alua/Makefile ./path_priority/pp_alua/Makefile
+--- ../multipath-tools-0.4.5.orig/path_priority/pp_alua/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./path_priority/pp_alua/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -27,6 +27,7 @@
+ STRIP		= strip --strip-all -R .comment -R .note
+ endif
+ 
++OPTFLAGS = -pipe -g -Wall
+ CFLAGS = -pipe -g -O2 -Wall -Wunused -Wstrict-prototypes -DDEBUG=$(DEBUG)
+ 
+ all: $(BUILD)
+diff -u -r ../multipath-tools-0.4.5.orig/path_priority/pp_balance_units/Makefile ./path_priority/pp_balance_units/Makefile
+--- ../multipath-tools-0.4.5.orig/path_priority/pp_balance_units/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./path_priority/pp_balance_units/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -9,10 +9,12 @@
+ include $(TOPDIR)/Makefile.inc
+ 
+ ifeq ($(strip $(BUILD)),klibc)
++OPTFLAGS = -pipe -g -Wall
+ 	CFLAGS = -I/usr/include -DDEBUG=$(DEBUG)
+ 	OBJS = pp_balance_units.o $(MULTIPATHLIB)-$(BUILD).a
+ else
+-	CFLAGS = -pipe -g -Wall -Wunused -Wstrict-prototypes \
++OPTFLAGS = -pipe -g -Wall
++	CFLAGS = $(OPTFLAGS) -Wunused -Wstrict-prototypes \
+ 		 -I$(multipathdir) -DDEBUG=$(DEBUG)
+ 	LDFLAGS = -ldevmapper
+ 	OBJS = pp_balance_units.o $(MULTIPATHLIB)-$(BUILD).a
+diff -u -r ../multipath-tools-0.4.5.orig/path_priority/pp_emc/Makefile ./path_priority/pp_emc/Makefile
+--- ../multipath-tools-0.4.5.orig/path_priority/pp_emc/Makefile	2005-09-02 16:14:18.000000000 +0300
++++ ./path_priority/pp_emc/Makefile	2005-10-16 01:51:01.000000000 +0300
+@@ -5,6 +5,7 @@
+ TOPDIR		= ../..
+ include $(TOPDIR)/Makefile.inc
+ 
++OPTFLAGS = -pipe -g -Wall
+ CFLAGS = -pipe -g -O2 -Wall -Wunused -Wstrict-prototypes
+ 
+ all: $(BUILD)
