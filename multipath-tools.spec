@@ -8,7 +8,8 @@ Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
 URL:		http://christophe.varoqui.free.fr/
-Patch0:		%{name}-bashism.patch
+Patch0:		%{name}-optflags.patch
+Patch1:		%{name}-bashism.patch
 BuildRequires:	readline-devel
 BuildRequires:	device-mapper-devel > 1.00.19
 BuildRequires:	sysfsutils >= 1.3.0-1.1
@@ -35,6 +36,7 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 %prep
 %setup -q
 %patch0 -p1
+%patch1 -p1
 mv kpartx/README README.kpartx
 
 %build
