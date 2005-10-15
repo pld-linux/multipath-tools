@@ -1,5 +1,5 @@
 # TODO: optflags
-Summary:	Linux multipath implementation
+Summary:	Tools to manage multipathed devices with the device-mapper.
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.4.5
@@ -10,12 +10,21 @@ Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.ta
 # Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
 URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	sysfsutils >= 1.3.0-1.1
+Requires:	udev >= 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir /sbin
 
 %description
-The Linux multipath implementation.
+multipath-tools provides the tools to manage multipathed devices by
+instructing the device-mapper multipath module what to do. The tools
+are:
+- multipath: scan the system for multipathed devices, assembles them
+  and update the device-mapper's maps
+- multipathd: wait for maps events, then execs multipath
+- devmap-name: provides a meaningful device name to udev for devmaps
+- kpartx: maps linear devmaps upon device partitions, which makes
+  multipath maps partionable
 
 %description -l pl
 Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
