@@ -107,3 +107,14 @@ diff -u -r multipath-tools-0.4.5/path_priority/pp_emc/Makefile mm/path_priority/
  
  all: $(BUILD)
  
+--- ./libcheckers/Makefile~	2005-10-16 02:37:52.000000000 +0300
++++ ./libcheckers/Makefile	2005-10-16 02:37:53.000000000 +0300
+@@ -7,6 +7,8 @@
+ include ../Makefile.inc
+ 
+ OBJS = readsector0.o tur.o selector.o directio.o emc_clariion.o hp_sw.o
++OPTFLAGS = -pipe -g
++CFLAGS = $(OPTFLAGS) -Wall -Wunused -Wstrict-prototypes
+ 
+ all: $(BUILD)
+ 
