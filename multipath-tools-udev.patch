@@ -4,4 +4,4 @@
  # multipath wants the devmaps presented as meaninglful device names
  # so name them after their devmap name
 -KERNEL="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", NAME="%k", SYMLINK="%c"
-+KERNEL=="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", NAME="%k", SYMLINK="%c" OPTIONS="last_rule"
++KERNEL=="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", NAME="%k", SYMLINK="%c" OPTIONS+="last_rule"
