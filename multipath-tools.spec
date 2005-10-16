@@ -3,7 +3,7 @@ Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów dla Linuksa
 Name:		multipath-tools
 Version:	0.4.5
 Release:	0.4
-License:	GPL
+License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
