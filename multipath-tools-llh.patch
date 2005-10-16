@@ -1,0 +1,11 @@
+--- ./kpartx/lopart.c~	2005-09-02 16:14:18.000000000 +0300
++++ ./kpartx/lopart.c	2005-10-16 03:29:28.000000000 +0300
+@@ -27,7 +27,7 @@
+ #include <sys/mman.h>
+ #include <sysmacros.h>
+ 
+-#if defined(__hppa__) || defined(__powerpc64__) || defined (__alpha__) \
++#if defined(__hppa__) || defined(__powerpc64__) \
+  || defined (__x86_64__)
+ typedef unsigned long __kernel_old_dev_t;
+ #elif defined(__powerpc__) || defined(__ia64__)
