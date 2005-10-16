@@ -41,6 +41,7 @@ Implementacja wielotrasowego dostêpu do zasobów dla Linuksa.
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
 mv kpartx/README README.kpartx
 
 %build
