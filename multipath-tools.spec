@@ -11,8 +11,9 @@ URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-optflags.patch
 Patch1:		%{name}-bashism.patch
 Patch2:		%{name}-udev.patch
-BuildRequires:	readline-devel
 BuildRequires:	device-mapper-devel >= 1.01.01
+BuildRequires:	linux-libc-headers >= 2.6.12.0-5
+BuildRequires:	readline-devel
 BuildRequires:	sysfsutils >= 1.3.0-1.1
 Requires:	udev >= 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
