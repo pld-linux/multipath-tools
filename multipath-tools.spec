@@ -16,7 +16,7 @@ BuildRequires:	device-mapper-devel >= 1.01.01
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
 BuildRequires:	sysfsutils >= 1.3.0-1.1
-Requires:	udev >= 1:070-4.1
+Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir	/sbin
