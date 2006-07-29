@@ -1,24 +1,22 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów przy u¿yciu device-mappera
 Name:		multipath-tools
-Version:	0.4.5
-Release:	0.4
+Version:	0.4.7
+Release:	0.1
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
-# Source0-md5:	d8f87a4f08448a209d6e5bb7aa426830
+# Source0-md5:	0a7574f0dd85f2b50f6aff91d83633ad
 URL:		http://christophe.varoqui.free.fr/
-Patch0:		%{name}-optflags.patch
-Patch1:		%{name}-bashism.patch
+#Patch0:		%{name}-optflags.patch
+#Patch1:		%{name}-bashism.patch
+Patch0:		%{name}-llh.patch
+Patch1:	%{name}-selinux.patch
 Patch2:		%{name}-udev.patch
-Patch3:		%{name}-llh.patch
 BuildRequires:	device-mapper-devel >= 1.01.01
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
-BuildRequires:	sysfsutils >= 1.3.0-1.1
-# patch here:
-# http://www.kernel.org/git/gitweb.cgi?p=linux/storage/multipath-tools/.git;a=commitdiff_plain;h=88b2dceb95cc49d379a8dfa6d563b10559dead4e;hp=1df074ffd85c05a7eec2db7b25d6219cc6f4da02
-BuildRequires:	sysfsutils < 2.0.0
+BuildRequires:	sysfsutils-devel >= 2.0.0
 Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -53,8 +51,6 @@ device-mappera. Narzêdzia to:
 %setup -q
 %patch0 -p1
 %patch1 -p1
-%patch2 -p1
-%patch3 -p1
 mv kpartx/README README.kpartx
 
 %build
@@ -68,7 +64,7 @@ install -d $RPM_BUILD_ROOT%{_bindir}
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
-mv $RPM_BUILD_ROOT{%{_prefix}/bin,%{_bindir}}/multipathd
+mv $RPM_BUILD_ROOT%{_sbindir}/multipathd $RPM_BUILD_ROOT%{_bindir}
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
@@ -81,10 +77,8 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/udev/rules.d/*.rules
 %attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
-%attr(755,root,root) %{_sbindir}/mpath_prio_alua
-%attr(755,root,root) %{_sbindir}/mpath_prio_emc
+%attr(755,root,root) %{_sbindir}/mpath_prio_*
 %attr(755,root,root) %{_sbindir}/multipath
-%attr(755,root,root) %{_sbindir}/pp_balance_units
 %attr(755,root,root) %{_bindir}/multipathd
 %{_mandir}/man8/devmap_name.8*
 %{_mandir}/man8/kpartx.8*
