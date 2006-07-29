@@ -1,8 +1,0 @@
---- ./multipath/multipath.dev	2005-09-02 16:14:18.000000000 +0300
-+++ /tmp/multipath.dev	2005-10-16 01:33:59.000000000 +0300
-@@ -1,4 +1,4 @@
--#!/bin/sh -e
-+#!/bin/bash -e
- 
- if [ ! "${ACTION}" = add ] ; then
- 	exit
