@@ -8,10 +8,9 @@ Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	0a7574f0dd85f2b50f6aff91d83633ad
 URL:		http://christophe.varoqui.free.fr/
-#Patch0:		%{name}-optflags.patch
-#Patch1:		%{name}-bashism.patch
+#Patch0: %{name}-optflags.patch # NEEDS UPDATE
 Patch0:		%{name}-llh.patch
-Patch1:	%{name}-selinux.patch
+Patch1:		%{name}-selinux.patch
 Patch2:		%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.01.01
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -21,7 +20,6 @@ Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir	/sbin
-%define		_bindir		%{_prefix}/sbin
 
 %description
 multipath-tools provides the tools to manage multipathed devices by
@@ -60,11 +58,9 @@ mv kpartx/README README.kpartx
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT%{_bindir}
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
-mv $RPM_BUILD_ROOT%{_sbindir}/multipathd $RPM_BUILD_ROOT%{_bindir}
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
@@ -77,9 +73,14 @@ rm -rf $RPM_BUILD_ROOT
 %{_sysconfdir}/udev/rules.d/*.rules
 %attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
-%attr(755,root,root) %{_sbindir}/mpath_prio_*
+%attr(755,root,root) %{_sbindir}/mpath_prio_alua
+%attr(755,root,root) %{_sbindir}/mpath_prio_balance_units
+%attr(755,root,root) %{_sbindir}/mpath_prio_emc
+%attr(755,root,root) %{_sbindir}/mpath_prio_netapp
+%attr(755,root,root) %{_sbindir}/mpath_prio_random
+%attr(755,root,root) %{_sbindir}/mpath_prio_tpc
 %attr(755,root,root) %{_sbindir}/multipath
-%attr(755,root,root) %{_bindir}/multipathd
+%attr(755,root,root) %{_sbindir}/multipathd
 %{_mandir}/man8/devmap_name.8*
 %{_mandir}/man8/kpartx.8*
 %{_mandir}/man8/mpath_prio_alua.8*
