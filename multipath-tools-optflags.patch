@@ -1,0 +1,11 @@
+--- multipath-tools-0.4.7/libmultipath/Makefile.orig	2006-03-13 12:07:45.000000000 +0100
++++ multipath-tools-0.4.7/libmultipath/Makefile	2006-08-19 22:55:14.593672750 +0200
+@@ -6,7 +6,7 @@
+ 
+ include ../Makefile.inc
+ 
+-CFLAGS = -I$(checkersdir)
++CFLAGS += -I$(checkersdir)
+ 
+ OBJS = memory.o parser.o vector.o devmapper.o callout.o \
+        hwtable.o blacklist.o util.o dmparser.o config.o \
