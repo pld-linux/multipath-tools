@@ -8,10 +8,11 @@ Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	0a7574f0dd85f2b50f6aff91d83633ad
 URL:		http://christophe.varoqui.free.fr/
-#Patch0: %{name}-optflags.patch # NEEDS UPDATE
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-selinux.patch
-Patch2:		%{name}-udev.patch
+Patch2:		%{name}-optflags.patch
+# was not used - is OPTIONS+="last_rule" stille needed?
+#Patch2:		%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.01.01
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
@@ -49,11 +50,12 @@ device-mappera. Narzêdzia to:
 %setup -q
 %patch0 -p1
 %patch1 -p1
+%patch2 -p1
 mv kpartx/README README.kpartx
 
 %build
 %{__make} -j1 \
-	OPTFLAGS="%{rpmcflags}" \
+	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes" \
 	CC="%{__cc}"
 
 %install
