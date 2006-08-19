@@ -88,11 +88,3 @@ rm -rf $RPM_BUILD_ROOT
 %{_mandir}/man8/mpath_prio_alua.8*
 %{_mandir}/man8/multipath.8*
 %{_mandir}/man8/multipathd.8*
-
-%if %{with initrd}
-%exclude %{_sbindir}/initrd-*
-
-%files initrd
-%defattr(644,root,root,755)
-%attr(755,root,root) %{_sbindir}/initrd-*
-%endif
