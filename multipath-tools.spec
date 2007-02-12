@@ -1,5 +1,5 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
-Summary(pl):	Implementacja wielotrasowego dostêpu do zasobów przy u¿yciu device-mappera
+Summary(pl.UTF-8):   Implementacja wielotrasowego dostÄ™pu do zasobÃ³w przy uÅ¼yciu device-mappera
 Name:		multipath-tools
 Version:	0.4.7
 Release:	0.1
@@ -33,18 +33,18 @@ are:
 - kpartx: maps linear devmaps upon device partitions, which makes
   multipath maps partionable
 
-%description -l pl
-multipath-tools zawieraj± narzêdzia do zarz±dzania wielotrasowym
-dostêpem do urz±dzeñ poprzez instruowanie modu³u multipath
-device-mappera. Narzêdzia to:
-- multipath - przeszukuje system pod k±tem urz±dzeñ z dostêpem
-  wielotrasowym, ³±czy je i uaktualnia odwzorowania device-mappera
-- multipathd - oczekuje na zdarzenia odwzorowañ, po których uruchamia
+%description -l pl.UTF-8
+multipath-tools zawierajÄ… narzÄ™dzia do zarzÄ…dzania wielotrasowym
+dostÄ™pem do urzÄ…dzeÅ„ poprzez instruowanie moduÅ‚u multipath
+device-mappera. NarzÄ™dzia to:
+- multipath - przeszukuje system pod kÄ…tem urzÄ…dzeÅ„ z dostÄ™pem
+  wielotrasowym, Å‚Ä…czy je i uaktualnia odwzorowania device-mappera
+- multipathd - oczekuje na zdarzenia odwzorowaÅ„, po ktÃ³rych uruchamia
   multipath
-- devmap-name - dostarcza do udev znacz±c± nazwê urz±dzenia dla map
-  urz±dzeñ
-- kpartx - odwzorowuje liniowe mapy urz±dzeñ na partycje urz±dzeñ, co
-  umo¿liwia tworzenie partycji na odwzorowaniach wielotrasowych
+- devmap-name - dostarcza do udev znaczÄ…cÄ… nazwÄ™ urzÄ…dzenia dla map
+  urzÄ…dzeÅ„
+- kpartx - odwzorowuje liniowe mapy urzÄ…dzeÅ„ na partycje urzÄ…dzeÅ„, co
+  umoÅ¼liwia tworzenie partycji na odwzorowaniach wielotrasowych
 
 %prep
 %setup -q
