@@ -1,5 +1,5 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
-Summary(pl.UTF-8):   Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
+Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.7
 Release:	0.1
