@@ -9,36 +9,36 @@
  endif
  
  EXEC = devmap_name
---- multipath-tools-0.4.7-o/kpartx/Makefile	2006-03-13 04:07:45.000000000 -0700
-+++ multipath-tools-0.4.7/kpartx/Makefile	2006-07-29 04:11:48.000000000 -0600
+--- multipath-tools-0.4.8/kpartx/Makefile.orig	2007-08-02 23:05:37.000000000 +0200
++++ multipath-tools-0.4.8/kpartx/Makefile	2007-09-10 00:28:52.386238483 +0200
 @@ -13,7 +13,7 @@
- 	       lopart.o xstrncpy.o devmapper.o dasd.o mac.o \
+ 	       lopart.o xstrncpy.o devmapper.o dasd.o mac.o sun.o \
  	       $(MULTIPATHLIB)-$(BUILD).a $(libdm)
  else
 -	LDFLAGS = -ldevmapper
 +	LDFLAGS = -ldevmapper -lselinux -lsepol
- 	OBJS = bsd.o dos.o kpartx.o solaris.o unixware.o dasd.o \
+ 	OBJS = bsd.o dos.o kpartx.o solaris.o unixware.o dasd.o sun.o \
  	       gpt.o mac.o crc32.o lopart.o xstrncpy.o devmapper.o
  endif
---- multipath-tools-0.4.7-o/multipath/Makefile	2006-03-13 04:07:45.000000000 -0700
-+++ multipath-tools-0.4.7/multipath/Makefile	2006-07-29 04:11:48.000000000 -0600
-@@ -12,7 +12,7 @@
+--- multipath-tools-0.4.8/multipath/Makefile.orig	2007-08-02 23:05:37.000000000 +0200
++++ multipath-tools-0.4.8/multipath/Makefile	2007-09-10 00:29:21.867918548 +0200
+@@ -13,7 +13,7 @@
  ifeq ($(strip $(BUILD)),klibc)
- 	OBJS += $(libdm) $(libsysfs)
+ 	OBJS += $(libdm)
  else
--	LDFLAGS += -ldevmapper -lsysfs
-+	LDFLAGS += -ldevmapper -lselinux -lsepol -lsysfs
+-	LDFLAGS += -ldevmapper
++	LDFLAGS += -ldevmapper -lselinux -lsepol
  endif
  
  EXEC = multipath
---- multipath-tools-0.4.7-o/multipathd/Makefile	2006-03-13 04:07:45.000000000 -0700
-+++ multipath-tools-0.4.7/multipathd/Makefile	2006-07-29 04:11:48.000000000 -0600
+--- multipath-tools-0.4.8/multipathd/Makefile.orig	2007-08-02 23:05:37.000000000 +0200
++++ multipath-tools-0.4.8/multipathd/Makefile	2007-09-10 00:29:51.665616622 +0200
 @@ -7,7 +7,7 @@
  # basic flags setting
  #
  CFLAGS += -DDAEMON -I$(multipathdir) -I$(checkersdir)
--LDFLAGS = -lpthread -ldevmapper -lsysfs -lreadline -lncurses
-+LDFLAGS = -lpthread -ldevmapper -lselinux -lsepol -lsysfs -lreadline -lncurses
+-LDFLAGS = -lpthread -ldevmapper -lreadline -lncurses -laio
++LDFLAGS = -lpthread -ldevmapper -lselinux -lsepol -lreadline -lncurses -laio
  
  #
  # debuging stuff
