@@ -1,19 +1,18 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.4.7
+Version:	0.4.8
 Release:	0.1
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
-# Source0-md5:	0a7574f0dd85f2b50f6aff91d83633ad
+# Source0-md5:	3563b863b408d07c46929b6e8c2c248c
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
-Patch1:		%{name}-selinux.patch
-Patch2:		%{name}-optflags.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
-#Patch2:		%{name}-udev.patch
+#Patch1:		%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.01.01
+BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
 BuildRequires:	sysfsutils-devel >= 2.0.0
@@ -49,8 +48,6 @@ device-mappera. Narzędzia to:
 %prep
 %setup -q
 %patch0 -p1
-%patch1 -p1
-%patch2 -p1
 mv kpartx/README README.kpartx
 
 %build
@@ -60,9 +57,12 @@ mv kpartx/README README.kpartx
 
 %install
 rm -rf $RPM_BUILD_ROOT
+
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
+install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
+install -d $RPM_BUILD_ROOT/var/lib/multipath
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
@@ -72,17 +72,24 @@ rm -rf $RPM_BUILD_ROOT
 %files
 %defattr(644,root,root,755)
 %doc AUTHOR ChangeLog FAQ README* TODO
-%{_sysconfdir}/udev/rules.d/*.rules
 %attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) %{_sbindir}/mpath_prio_alua
 %attr(755,root,root) %{_sbindir}/mpath_prio_balance_units
 %attr(755,root,root) %{_sbindir}/mpath_prio_emc
+%attr(755,root,root) %{_sbindir}/mpath_prio_hds_modular
+%attr(755,root,root) %{_sbindir}/mpath_prio_hp_sw
 %attr(755,root,root) %{_sbindir}/mpath_prio_netapp
 %attr(755,root,root) %{_sbindir}/mpath_prio_random
-%attr(755,root,root) %{_sbindir}/mpath_prio_tpc
+%attr(755,root,root) %{_sbindir}/mpath_prio_rdac
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
+%{_sysconfdir}/udev/rules.d/40-multipath.rules
+%{_sysconfdir}/udev/rules.d/kpartx.rules
+%attr(755,root,root) /%{_lib}/udev/kpartx_id
+%dir /var/lib/multipath
+%{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/devmap_name.8*
 %{_mandir}/man8/kpartx.8*
 %{_mandir}/man8/mpath_prio_alua.8*
