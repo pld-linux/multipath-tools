@@ -11,7 +11,7 @@ URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
 #Patch1:		%{name}-udev.patch
-BuildRequires:	device-mapper-devel >= 1.01.01
+BuildRequires:	device-mapper-devel >= 1.02.07
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
@@ -87,7 +87,7 @@ rm -rf $RPM_BUILD_ROOT
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
 %{_sysconfdir}/udev/rules.d/40-multipath.rules
 %{_sysconfdir}/udev/rules.d/kpartx.rules
-%attr(755,root,root) /%{_lib}/udev/kpartx_id
+%attr(755,root,root) /lib/udev/kpartx_id
 %dir /var/lib/multipath
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/devmap_name.8*
