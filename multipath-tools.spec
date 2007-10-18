@@ -63,7 +63,7 @@ rm -rf $RPM_BUILD_ROOT
 	DESTDIR=$RPM_BUILD_ROOT
 
 install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
-install -d %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
+install -D %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
 install -d $RPM_BUILD_ROOT/var/lib/multipath
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
