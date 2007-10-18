@@ -2,7 +2,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.1
+Release:	0.2
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -11,6 +11,7 @@ URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
 #Patch1:		%{name}-udev.patch
+Source1:	multipathd.init
 BuildRequires:	device-mapper-devel >= 1.02.07
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -62,12 +63,23 @@ rm -rf $RPM_BUILD_ROOT
 	DESTDIR=$RPM_BUILD_ROOT
 
 install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
+install -d %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
 install -d $RPM_BUILD_ROOT/var/lib/multipath
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
 %clean
 rm -rf $RPM_BUILD_ROOT
+
+%pre
+if [ -f /etc/rc.d/init.d/multipathd ] && dmsetup table | grep -q multipath; then
+	service multipathd stop
+fi
+
+%post
+if dmsetup table | grep -q multipath; then
+	service multipathd start
+fi
 
 %files
 %defattr(644,root,root,755)
@@ -84,6 +96,7 @@ rm -rf $RPM_BUILD_ROOT
 %attr(755,root,root) %{_sbindir}/mpath_prio_rdac
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
+%attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
 %{_sysconfdir}/udev/rules.d/40-multipath.rules
 %{_sysconfdir}/udev/rules.d/kpartx.rules
