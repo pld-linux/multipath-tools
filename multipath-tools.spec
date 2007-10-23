@@ -1,3 +1,6 @@
+# Conditional build:
+%bcond_without	initrd		# don't build initrd version
+#
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
@@ -16,7 +19,12 @@ BuildRequires:	device-mapper-devel >= 1.02.07
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
+BuildRequires:	sed >= 4.0
 BuildRequires:	sysfsutils-devel >= 2.0.0
+%if %{with initrd}
+BuildRequires:	device-mapper-initrd-devel
+BuildRequires:	klibc-static
+%endif
 Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -50,8 +58,21 @@ device-mappera. Narzędzia to:
 %setup -q
 %patch0 -p1
 mv kpartx/README README.kpartx
+%{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
 
 %build
+%if %{with initrd}
+%{__make} -j1 \
+	BUILD=klibc \
+	CC="klcc -static" \
+	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes" \
+	BUILDDIRS='multipath pathx' \
+	klibcdir=%{_libdir}/klibc \
+	libdm='$(klibcdir)/libdevmapper.a'
+
+%{__make} clean
+%endif
+
 %{__make} -j1 \
 	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes" \
 	CC="%{__cc}"
