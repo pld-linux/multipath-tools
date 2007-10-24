@@ -5,7 +5,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.3
+Release:	0.4
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -100,7 +100,7 @@ if [ -f /etc/rc.d/init.d/multipathd ] && dmsetup table | grep -q multipath; then
 fi
 
 %post
-/sbin/chkconfig --add q2ded
+/sbin/chkconfig --add multipathd
 if dmsetup table | grep -q multipath; then
 	service multipathd start
 fi
@@ -108,7 +108,7 @@ fi
 %preun
 if [ "$1" = "0" ]; then
 	%service multipathd stop
-	/sbin/chkconfig --del q2ded
+	/sbin/chkconfig --del multipathd
 fi
 
 %files
