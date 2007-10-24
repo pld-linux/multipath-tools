@@ -5,7 +5,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.2
+Release:	0.3
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -13,7 +13,7 @@ Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.ta
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
-#Patch1:		%{name}-udev.patch
+#Patch1:	%{name}-udev.patch
 Source1:	multipathd.init
 BuildRequires:	device-mapper-devel >= 1.02.07
 BuildRequires:	libaio-devel
@@ -25,6 +25,8 @@ BuildRequires:	sysfsutils-devel >= 2.0.0
 BuildRequires:	device-mapper-initrd-devel
 BuildRequires:	klibc-static
 %endif
+Requires(post,preun):	/sbin/chkconfig
+Requires:	rc-scripts
 Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
@@ -98,8 +100,15 @@ if [ -f /etc/rc.d/init.d/multipathd ] && dmsetup table | grep -q multipath; then
 fi
 
 %post
+/sbin/chkconfig --add q2ded
 if dmsetup table | grep -q multipath; then
 	service multipathd start
+fi
+
+%preun
+if [ "$1" = "0" ]; then
+	%service multipathd stop
+	/sbin/chkconfig --del q2ded
 fi
 
 %files
