@@ -5,7 +5,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.5
+Release:	0.6
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -27,6 +27,7 @@ BuildRequires:	klibc-static
 %endif
 Requires(post,preun):	/sbin/chkconfig
 Requires:	device-mapper >= 1.02.08
+Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
 Conflicts:	udev < 1:070-4.1
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
