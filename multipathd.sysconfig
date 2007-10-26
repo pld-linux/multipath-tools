@@ -1,0 +1,9 @@
+# Customized settings for multipathd
+
+# Define nice level for multipathd
+SERVICE_RUN_NICE_LEVEL="+0"
+
+# Set the maximum number of open files
+MAX_OPEN_FDS=4096
+
+SERVICE_LIMITS="$DEFAULT_SERVICE_LIMITS -n $MAX_OPEN_FDS"
