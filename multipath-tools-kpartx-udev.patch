@@ -1,5 +1,5 @@
---- kpartx.rules	2007-08-03 00:05:37.000000000 +0300
-+++ /tmp/kpartx.rules	2007-10-26 01:16:10.000000000 +0300
+--- multipath-tools-0.4.8/kpartx/kpartx.rules~	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools-0.4.8/kpartx/kpartx.rules	2007-10-26 01:16:10.000000000 +0300
 @@ -7,6 +7,9 @@
  KERNEL!="dm-*", GOTO="kpartx_end"
  ACTION=="remove", GOTO="kpartx_end"
