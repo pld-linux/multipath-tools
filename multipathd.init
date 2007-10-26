@@ -11,81 +11,58 @@
 # Source function library
 . /etc/rc.d/init.d/functions
 
+[ -f /etc/sysconfig/multipathd ] && . /etc/sysconfig/multipathd
+
 DAEMON=/sbin/multipathd
 PIDFILE=/var/run/multipathd.pid
 
-# Set the maximum number of open files
-MAX_OPEN_FDS=4096
+SHELLFLAGS=$-
+
+start() {
+	set -$SHELLFLAGS
+	# Check if the service is already running?
+	if [ ! -f /var/lock/subsys/multipathd ]; then
+		msg_starting multipathd
+		modprobe dm-multipath
+		daemon multipathd
+		RETVAL=$?
+		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/multipathd
+	else
+		msg_already_running multipathd
+	fi
+}
+
+stop() {
+	set -$SHELLFLAGS
+	if [ -f /var/lock/subsys/multipathd ]; then
+		# Stop daemons.
+		msg_stopping multipathd
+		killproc --pidfile multipathd.pid multipathd -TERM
+		rm -f /var/lock/subsys/multipathd
+	else
+		msg_not_running multipathd
+	fi
+}
 
 RETVAL=0
 # See how we were called.
 case "$1" in
   start)
-	msg_starting multipathd
-	modprobe dm-multipath
-
-	# Set the maximum number of open files
-	if [ -n "$MAX_OPEN_FDS" ] ; then
-	    ulimit -n $MAX_OPEN_FDS
-	fi
-
-	if [ -f $PIDFILE ]; then
-		PID="$(cat $PIDFILE)"
-		PROCNAME="$(ps -o cmd --no-headers $PID)"
-	fi
-
-	if [ "$PROCNAME" != "$DAEMON" ]; then
-		$DAEMON
-		RETVAL=$?
-		sleep 1
-	fi
+  	start
 	;;
 
   stop)
-	msg_stopping multipathd
-
-	# Because of the way how multipathd sets up its own namespace
-	# and chroots to it, killproc cannot be used with this process.
-	# So implement a cruder version:
-	if [ -f $PIDFILE ]; then
-		PID="$(cat $PIDFILE)"
-		PROCNAME="$(ps -o cmd --no-headers $PID)"
-	fi
-
-	if [ "$PROCNAME" == "$DAEMON" ]; then
-		kill -TERM $PID
-	fi
-
+	stop
 	;;
-    
+
   restart|force-reload)
-	## Stop the service and regardless of whether it was
-	## running or not, start it again.
-	$0 stop
-	$0 start
+	stop
+	start
 	;;
 
   status)
-	echo -n "Checking for multipathd: "
-
-	# Status has a slightly different for the status command:
-	# 0 - service running
-	# 1 - service dead, but /var/run/  pid  file exists
-	# 2 - service dead, but /var/lock/ lock file exists
-	# 3 - service not running
-
-	if [ -f $PIDFILE ]; then
-		PID="$(cat $PIDFILE)"
-		PROCNAME="$(ps -o cmd --no-headers $PID)"
-		if [ "$PROCNAME" == "$DAEMON" ]; then
-			exit 0
-		else
-			exit 1
-		fi
-	else
-		exit 3
-	fi
-
+	status multipathd
+	RETVAL=$?
 	;;
   *)
 	msg_usage "$0 {start|stop|status|restart|force-reload}"
