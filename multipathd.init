@@ -13,13 +13,7 @@
 
 [ -f /etc/sysconfig/multipathd ] && . /etc/sysconfig/multipathd
 
-DAEMON=/sbin/multipathd
-PIDFILE=/var/run/multipathd.pid
-
-SHELLFLAGS=$-
-
 start() {
-	set -$SHELLFLAGS
 	# Check if the service is already running?
 	if [ ! -f /var/lock/subsys/multipathd ]; then
 		msg_starting multipathd
@@ -33,7 +27,6 @@ start() {
 }
 
 stop() {
-	set -$SHELLFLAGS
 	if [ -f /var/lock/subsys/multipathd ]; then
 		# Stop daemons.
 		msg_stopping multipathd
