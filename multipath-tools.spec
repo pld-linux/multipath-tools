@@ -5,17 +5,18 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.7
+Release:	0.8
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	3563b863b408d07c46929b6e8c2c248c
+Source1:	multipathd.init
+Source2:	multipathd.sysconfig
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
 #Patch1:	%{name}-udev.patch
-Source1:	multipathd.init
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -91,6 +92,7 @@ rm -rf $RPM_BUILD_ROOT
 
 install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
 install -D %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
+install -D %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
 install -d $RPM_BUILD_ROOT/var/lib/multipath
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
@@ -124,6 +126,7 @@ fi
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
+%config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
 %{_sysconfdir}/udev/rules.d/40-multipath.rules
 %{_sysconfdir}/udev/rules.d/kpartx.rules
