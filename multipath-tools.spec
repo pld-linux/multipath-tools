@@ -5,13 +5,14 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.6
+Release:	0.7
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	3563b863b408d07c46929b6e8c2c248c
 URL:		http://christophe.varoqui.free.fr/
 Patch0:		%{name}-llh.patch
+Patch1:		%{name}-kpartx-udev.patch
 # was not used - is OPTIONS+="last_rule" stille needed?
 #Patch1:	%{name}-udev.patch
 Source1:	multipathd.init
@@ -61,6 +62,7 @@ device-mappera. Narzędzia to:
 %prep
 %setup -q
 %patch0 -p1
+%patch1 -p1
 mv kpartx/README README.kpartx
 %{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
 
@@ -96,16 +98,9 @@ rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 %clean
 rm -rf $RPM_BUILD_ROOT
 
-%pre
-if [ -f /etc/rc.d/init.d/multipathd ] && dmsetup table | grep -q multipath; then
-	service multipathd stop
-fi
-
 %post
 /sbin/chkconfig --add multipathd
-if dmsetup table | grep -q multipath; then
-	service multipathd start
-fi
+%service multipathd restart
 
 %preun
 if [ "$1" = "0" ]; then
