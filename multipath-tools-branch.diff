@@ -1,0 +1,744 @@
+diff -ur -x .git multipath-tools-0.4.8/kpartx/devmapper.c multipath-tools/kpartx/devmapper.c
+--- multipath-tools-0.4.8/kpartx/devmapper.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/kpartx/devmapper.c	2007-11-14 01:07:15.579282644 +0200
+@@ -4,10 +4,12 @@
+ #include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
++#include <stdint.h>
+ #include <libdevmapper.h>
+ #include <ctype.h>
+ #include <linux/kdev_t.h>
+ #include <errno.h>
++#include "devmapper.h"
+ 
+ #define UUID_PREFIX "part%d-"
+ #define MAX_PREFIX_LEN 8
+@@ -72,10 +74,10 @@
+ 
+ extern int
+ dm_addmap (int task, const char *name, const char *target,
+-	   const char *params, unsigned long size, const char *uuid, int part) {
++	   const char *params, uint64_t size, const char *uuid, int part) {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+-	char *prefixed_uuid;
++	char *prefixed_uuid = NULL;
+ 
+ 	if (!(dmt = dm_task_create (task)))
+ 		return 0;
+diff -ur -x .git multipath-tools-0.4.8/kpartx/devmapper.h multipath-tools/kpartx/devmapper.h
+--- multipath-tools-0.4.8/kpartx/devmapper.h	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/kpartx/devmapper.h	2007-11-14 01:07:15.579282644 +0200
+@@ -1,7 +1,7 @@
+ int dm_prereq (char *, int, int, int);
+ int dm_simplecmd (int, const char *);
+-int dm_addmap (int, const char *, const char *, const char *, unsigned long,
+-	       char *, int);
++int dm_addmap (int, const char *, const char *, const char *, uint64_t,
++	       const char *, int);
+ int dm_map_present (char *);
+ char * dm_mapname(int major, int minor);
+ dev_t dm_get_first_dep(char *devname);
+diff -ur -x .git multipath-tools-0.4.8/kpartx/gpt.c multipath-tools/kpartx/gpt.c
+--- multipath-tools-0.4.8/kpartx/gpt.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/kpartx/gpt.c	2007-11-14 01:07:15.579282644 +0200
+@@ -36,6 +36,7 @@
+ #include <errno.h>
+ #include <endian.h>
+ #include <byteswap.h>
++#include <linux/fs.h>
+ #include "crc32.h"
+ 
+ #if BYTE_ORDER == LITTLE_ENDIAN
+@@ -50,10 +51,18 @@
+ #  define __cpu_to_le32(x) bswap_32(x)
+ #endif
+ 
++#ifndef BLKGETLASTSECT
+ #define BLKGETLASTSECT  _IO(0x12,108)   /* get last sector of block device */
++#endif
++#ifndef BLKGETSIZE
+ #define BLKGETSIZE _IO(0x12,96)	        /* return device size */
++#endif
++#ifndef BLKSSZGET
+ #define BLKSSZGET  _IO(0x12,104)	/* get block device sector size */
++#endif
++#ifndef BLKGETSIZE64
+ #define BLKGETSIZE64 _IOR(0x12,114,sizeof(uint64_t))	/* return device size in bytes (u64 *arg) */
++#endif
+ 
+ struct blkdev_ioctl_param {
+         unsigned int block;
+@@ -143,20 +152,14 @@
+ static uint64_t
+ _get_num_sectors(int filedes)
+ {
+-	unsigned long sectors=0;
+ 	int rc;
+-#if 0
+-        uint64_t bytes=0;
++	uint64_t bytes=0;
+ 
+- 	rc = ioctl(filedes, BLKGETSIZE64, &bytes);
++	rc = ioctl(filedes, BLKGETSIZE64, &bytes);
+ 	if (!rc)
+ 		return bytes / get_sector_size(filedes);
+-#endif
+-        rc = ioctl(filedes, BLKGETSIZE, &sectors);
+-        if (rc)
+-                return 0;
+-        
+-	return sectors;
++
++	return 0;
+ }
+ 
+ /************************************************************
+@@ -193,7 +196,7 @@
+ 		sectors = 1;
+ 	}
+ 
+-	return sectors - 1;
++	return sectors ? sectors - 1 : 0;
+ }
+ 
+ 
+@@ -220,17 +223,22 @@
+ {
+ 	int sector_size = get_sector_size(fd);
+ 	off_t offset = lba * sector_size;
++	uint64_t lastlba;
+         ssize_t bytesread;
+ 
+ 	lseek(fd, offset, SEEK_SET);
+ 	bytesread = read(fd, buffer, bytes);
+ 
++	lastlba = last_lba(fd);
++	if (!lastlba)
++		return bytesread;
++
+         /* Kludge.  This is necessary to read/write the last
+            block of an odd-sized disk, until Linux 2.5.x kernel fixes.
+            This is only used by gpt.c, and only to read
+            one sector, so we don't have to be fancy.
+         */
+-        if (!bytesread && !(last_lba(fd) & 1) && lba == last_lba(fd)) {
++        if (!bytesread && !(lastlba & 1) && lba == lastlba) {
+                 bytesread = read_lastoddsector(fd, lba, buffer, bytes);
+         }
+         return bytesread;
+@@ -505,7 +513,8 @@
+ 	if (!gpt || !ptes)
+ 		return 0;
+ 
+-	lastlba = last_lba(fd);
++	if (!(lastlba = last_lba(fd)))
++		return 0;
+ 	good_pgpt = is_gpt_valid(fd, GPT_PRIMARY_PARTITION_TABLE_LBA,
+ 				 &pgpt, &pptes);
+         if (good_pgpt) {
+diff -ur -x .git multipath-tools-0.4.8/kpartx/kpartx.c multipath-tools/kpartx/kpartx.c
+--- multipath-tools-0.4.8/kpartx/kpartx.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/kpartx/kpartx.c	2007-11-14 01:07:15.579282644 +0200
+@@ -25,6 +25,7 @@
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
++#include <stdint.h>
+ #include <sys/stat.h>
+ #include <sys/types.h>
+ #include <ctype.h>
+@@ -366,16 +367,16 @@
+ 
+ 				slices[j].minor = m++;
+ 
+-				printf("%s%s%d : 0 %lu %s %lu\n",
++				printf("%s%s%d : 0 %" PRIu64 " %s %" PRIu64"\n",
+ 				       mapname, delim, j+1,
+-				       (unsigned long) slices[j].size, device,
+-				       (unsigned long) slices[j].start);
++				       slices[j].size, device,
++				       slices[j].start);
+ 			}
+ 			/* Loop to resolve contained slices */
+ 			d = c;
+ 			while (c) {
+ 				for (j = 0; j < n; j++) {
+-					unsigned long start;
++					uint64_t start;
+ 					int k = slices[j].container - 1;
+ 
+ 					if (slices[j].size == 0)
+@@ -387,9 +388,9 @@
+ 					slices[j].minor = m++;
+ 
+ 					start = slices[j].start - slices[k].start;
+-					printf("%s%s%d : 0 %lu /dev/dm-%d %lu\n",
++					printf("%s%s%d : 0 %" PRIu64 " /dev/dm-%d %" PRIu64 "\n",
+ 					       mapname, delim, j+1,
+-					       (unsigned long) slices[j].size,
++					       slices[j].size,
+ 					       slices[k].minor, start);
+ 					c--;
+ 				}
+@@ -448,8 +449,8 @@
+ 				}
+ 				strip_slash(partname);
+ 
+-				if (safe_sprintf(params, "%s %lu", device,
+-					     (unsigned long)slices[j].start)) {
++				if (safe_sprintf(params, "%s %" PRIu64 ,
++						 device, slices[j].start)) {
+ 					fprintf(stderr, "params too small\n");
+ 					exit(1);
+ 				}
+@@ -468,7 +469,7 @@
+ 					&slices[j].minor);
+ 
+ 				if (verbose)
+-					printf("add map %s (%d:%d): 0 %lu %s %s\n",
++					printf("add map %s (%d:%d): 0 %" PRIu64 " %s %s\n",
+ 					       partname, slices[j].major,
+ 					       slices[j].minor, slices[j].size,
+ 					       DM_TARGET, params);
+@@ -502,10 +503,10 @@
+ 					}
+ 					strip_slash(partname);
+ 
+-					if (safe_sprintf(params, "%d:%d %lu",
++					if (safe_sprintf(params, "%d:%d %" PRIu64,
+ 							 slices[k].major,
+ 							 slices[k].minor,
+-							 (unsigned long)slices[j].start)) {
++							 slices[j].start)) {
+ 						fprintf(stderr, "params too small\n");
+ 						exit(1);
+ 					}
+@@ -524,7 +525,7 @@
+ 						&slices[j].minor);
+ 
+ 					if (verbose)
+-						printf("add map %s : 0 %lu %s %s\n",
++						printf("add map %s : 0 %" PRIu64 " %s %s\n",
+ 						       partname, slices[j].size,
+ 						       DM_TARGET, params);
+ 					c--;
+diff -ur -x .git multipath-tools-0.4.8/kpartx/kpartx.h multipath-tools/kpartx/kpartx.h
+--- multipath-tools-0.4.8/kpartx/kpartx.h	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/kpartx/kpartx.h	2007-11-14 01:07:15.579282644 +0200
+@@ -1,6 +1,8 @@
+ #ifndef _KPARTX_H
+ #define _KPARTX_H
+ 
++#include <stdint.h>
++
+ /*
+  * For each partition type there is a routine that takes
+  * a block device and a range, and returns the list of
+@@ -20,8 +22,8 @@
+  * units: 512 byte sectors
+  */
+ struct slice {
+-	unsigned long start;
+-	unsigned long size;
++	uint64_t start;
++	uint64_t size;
+ 	int container;
+ 	int major;
+ 	int minor;
+diff -ur -x .git multipath-tools-0.4.8/libcheckers/checkers.c multipath-tools/libcheckers/checkers.c
+--- multipath-tools-0.4.8/libcheckers/checkers.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/libcheckers/checkers.c	2007-11-14 01:07:15.579282644 +0200
+@@ -71,7 +71,7 @@
+ 		.init       = readsector0_init,
+ 		.free       = readsector0_free
+ 	},
+-	{0, 1, "", "", NULL, NULL, NULL, NULL},
++	{0, 1, 0, "", "", NULL, NULL, NULL, NULL},
+ };
+ 
+ void checker_set_fd (struct checker * c, int fd)
+@@ -89,6 +89,16 @@
+ 	c->sync = 0;
+ }
+ 
++void checker_enable (struct checker * c)
++{
++	c->disable = 0;
++}
++
++void checker_disable (struct checker * c)
++{
++	c->disable = 1;
++}
++
+ struct checker * checker_lookup (char * name)
+ {
+ 	struct checker * c = &checkers[0];
+@@ -118,6 +128,8 @@
+ {
+ 	int r;
+ 
++	if (c->disable)
++		return PATH_UNCHECKED;
+ 	if (c->fd <= 0) {
+ 		MSG(c, "no usable fd");
+ 		return PATH_WILD;
+diff -ur -x .git multipath-tools-0.4.8/libcheckers/checkers.h multipath-tools/libcheckers/checkers.h
+--- multipath-tools-0.4.8/libcheckers/checkers.h	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/libcheckers/checkers.h	2007-11-14 01:07:15.579282644 +0200
+@@ -87,6 +87,7 @@
+ struct checker {
+ 	int fd;
+ 	int sync;
++	int disable;
+ 	char name[CHECKER_NAME_LEN];
+ 	char message[CHECKER_MSG_LEN];       /* comm with callers */
+ 	void * context;                      /* store for persistent data */
+@@ -101,10 +102,12 @@
+ 
+ int checker_init (struct checker *, void **);
+ void checker_put (struct checker *);
+-void checker_reset (struct checker * c);
+-void checker_set_sync (struct checker * c);
+-void checker_set_async (struct checker * c);
++void checker_reset (struct checker *);
++void checker_set_sync (struct checker *);
++void checker_set_async (struct checker *);
+ void checker_set_fd (struct checker *, int);
++void checker_enable (struct checker *);
++void checker_disable (struct checker *);
+ struct checker * checker_lookup (char *);
+ int checker_check (struct checker *);
+ int checker_selected (struct checker *);
+diff -ur -x .git multipath-tools-0.4.8/libmultipath/blacklist.c multipath-tools/libmultipath/blacklist.c
+--- multipath-tools-0.4.8/libmultipath/blacklist.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/libmultipath/blacklist.c	2007-11-14 01:07:15.595283318 +0200
+@@ -297,16 +297,14 @@
+ 	int r;
+ 
+ 	r = _filter_devnode(conf->blist_devnode, conf->elist_devnode,pp->dev);
+-	if (r)
+-		return r;
+-	r = _filter_wwid(conf->blist_wwid, conf->elist_devnode, pp->wwid);
+-	if (r)
++	if (r > 0)
+ 		return r;
+ 	r = _filter_device(conf->blist_device, conf->elist_device,
+ 		 	   pp->vendor_id, pp->product_id);
+-	if (r)
++	if (r > 0)
+ 		return r;
+-	return 0;
++	r = _filter_wwid(conf->blist_wwid, conf->elist_wwid, pp->wwid);
++	return r;
+ }
+ 
+ int
+diff -ur -x .git multipath-tools-0.4.8/libmultipath/hwtable.c multipath-tools/libmultipath/hwtable.c
+--- multipath-tools-0.4.8/libmultipath/hwtable.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/libmultipath/hwtable.c	2007-11-14 01:07:15.619284329 +0200
+@@ -65,7 +65,7 @@
+ 		.getuid        = DEFAULT_GETUID,
+ 		.getprio       = "/sbin/mpath_prio_hp_sw /dev/%n",
+ 		.features      = "1 queue_if_no_path",
+-		.hwhandler     = "1 hp_sw",
++		.hwhandler     = "1 hp-sw",
+ 		.selector      = DEFAULT_SELECTOR,
+ 		.pgpolicy      = GROUP_BY_PRIO,
+ 		.pgfailback    = FAILBACK_UNDEF,
+@@ -96,7 +96,7 @@
+ 		.getuid        = DEFAULT_GETUID,
+ 		.getprio       = "/sbin/mpath_prio_hp_sw /dev/%n",
+ 		.features      = "1 queue_if_no_path",
+-		.hwhandler     = "1 hp_sw",
++		.hwhandler     = "1 hp-sw",
+ 		.selector      = DEFAULT_SELECTOR,
+ 		.pgpolicy      = GROUP_BY_PRIO,
+ 		.pgfailback    = FAILBACK_UNDEF,
+@@ -122,6 +122,21 @@
+ 		.checker_name  = TUR,
+ 	},
+ 	{
++		.vendor        = "HP",
++		.product       = "MSA2000s*",
++		.getuid        = "/sbin/cciss_id %n",
++		.getprio       = NULL,
++		.features      = DEFAULT_FEATURES,
++		.hwhandler     = DEFAULT_HWHANDLER,
++		.selector      = DEFAULT_SELECTOR,
++		.pgpolicy      = MULTIBUS,
++		.pgfailback    = FAILBACK_UNDEF,
++		.rr_weight     = RR_WEIGHT_NONE,
++		.no_path_retry = 12,
++		.minio         = DEFAULT_MINIO,
++		.checker_name  = TUR,
++	},
++	{
+ 		/* EVA 3000/5000 with new firmware */
+ 		.vendor        = "(COMPAQ|HP)",
+ 		.product       = "(MSA|HSV)1.1.*",
+diff -ur -x .git multipath-tools-0.4.8/multipathd/cli_handlers.c multipath-tools/multipathd/cli_handlers.c
+--- multipath-tools-0.4.8/multipathd/cli_handlers.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/multipathd/cli_handlers.c	2007-11-14 01:07:15.635285002 +0200
+@@ -431,6 +431,7 @@
+ 	condlog(2, "%s: reinstate path %s (operator)",
+ 		pp->mpp->alias, pp->dev_t);
+ 
++	checker_enable(&pp->checker);
+ 	return dm_reinstate_path(pp->mpp->alias, pp->dev_t);
+ }
+ 
+@@ -440,6 +441,7 @@
+ 	struct vectors * vecs = (struct vectors *)data;
+ 	char * param = get_keyparam(v, PATH);
+ 	struct path * pp;
++	int r;
+ 	
+ 	pp = find_path_by_dev(vecs->pathvec, param);
+ 
+@@ -452,7 +454,13 @@
+ 	condlog(2, "%s: fail path %s (operator)",
+ 		pp->mpp->alias, pp->dev_t);
+ 
+-	return dm_fail_path(pp->mpp->alias, pp->dev_t);
++	r = dm_fail_path(pp->mpp->alias, pp->dev_t);
++	/*
++	 * Suspend path checking to avoid auto-reinstating the path
++	 */
++	if (!r)
++		checker_disable(&pp->checker);
++	return r;
+ }
+ 
+ int
+diff -ur -x .git multipath-tools-0.4.8/multipathd/main.c multipath-tools/multipathd/main.c
+--- multipath-tools-0.4.8/multipathd/main.c	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools/multipathd/main.c	2007-11-14 01:07:15.635285002 +0200
+@@ -368,7 +368,7 @@
+ 		condlog(0, "%s: failed to get path uid", devname);
+ 		return 1; /* leave path added to pathvec */
+ 	}
+-	if (filter_path(conf, pp)){
++	if (filter_path(conf, pp) > 0){
+ 		int i = find_slot(vecs->pathvec, (void *)pp);
+ 		if (i != -1)
+ 			vector_del_slot(vecs->pathvec, i);
+@@ -852,167 +852,175 @@
+ 	}
+ }
+ 
+-static void *
+-checkerloop (void *ap)
++void
++check_path (struct vectors * vecs, struct path * pp)
+ {
+-	struct vectors *vecs;
+-	struct path *pp;
+-	int count = 0;
+ 	int newstate;
+-	unsigned int i;
+ 
+-	mlockall(MCL_CURRENT | MCL_FUTURE);
+-	vecs = (struct vectors *)ap;
+-	condlog(2, "path checkers start up");
++	if (!pp->mpp)
++		return;
++
++	if (pp->tick && --pp->tick)
++		return; /* don't check this path yet */
+ 
+ 	/*
+-	 * init the path check interval
++	 * provision a next check soonest,
++	 * in case we exit abnormaly from here
+ 	 */
+-	vector_foreach_slot (vecs->pathvec, pp, i) {
+-		pp->checkint = conf->checkint;
++	pp->tick = conf->checkint;
++
++	if (!checker_selected(&pp->checker)) {
++		pathinfo(pp, conf->hwtable, DI_SYSFS);
++		select_checker(pp);
+ 	}
++	if (!checker_selected(&pp->checker)) {
++		condlog(0, "%s: checker is not set", pp->dev);
++		return;
++	}
++	/*
++	 * Set checker in async mode.
++	 * Honored only by checker implementing the said mode.
++	 */
++	checker_set_async(&pp->checker);
+ 
+-	while (1) {
+-		pthread_cleanup_push(cleanup_lock, vecs->lock);
+-		lock(vecs->lock);
+-		condlog(4, "tick");
++	newstate = checker_check(&pp->checker);
+ 
+-		vector_foreach_slot (vecs->pathvec, pp, i) {
+-			if (!pp->mpp)
+-				continue;
++	if (newstate < 0) {
++		condlog(2, "%s: unusable path", pp->dev);
++		pathinfo(pp, conf->hwtable, 0);
++		return;
++	}
++	/*
++	 * Async IO in flight. Keep the previous path state
++	 * and reschedule as soon as possible
++	 */
++	if (newstate == PATH_PENDING) {
++		pp->tick = 1;
++		return;
++	}
++	if (newstate != pp->state) {
++		int oldstate = pp->state;
++		pp->state = newstate;
++		LOG_MSG(1, checker_message(&pp->checker));
+ 
+-			if (pp->tick && --pp->tick)
+-				continue; /* don't check this path yet */
++		/*
++		 * upon state change, reset the checkint
++		 * to the shortest delay
++		 */
++		pp->checkint = conf->checkint;
+ 
++		if (newstate == PATH_DOWN || newstate == PATH_SHAKY ||
++		    update_multipath_strings(pp->mpp, vecs->pathvec)) {
+ 			/*
+-			 * provision a next check soonest,
+-			 * in case we exit abnormaly from here
++			 * proactively fail path in the DM
+ 			 */
+-			pp->tick = conf->checkint;
++			if (oldstate == PATH_UP ||
++			    oldstate == PATH_GHOST)
++				fail_path(pp, 1);
++			else
++				fail_path(pp, 0);
+ 
+-			if (!checker_selected(&pp->checker)) {
+-				pathinfo(pp, conf->hwtable, DI_SYSFS);
+-				select_checker(pp);
+-			}
+-			if (!checker_selected(&pp->checker)) {
+-				condlog(0, "%s: checker is not set", pp->dev);
+-				continue;
+-			}
+ 			/*
+-			 * Set checker in async mode.
+-			 * Honored only by checker implementing the said mode.
++			 * cancel scheduled failback
+ 			 */
+-			checker_set_async(&pp->checker);
++			pp->mpp->failback_tick = 0;
+ 
+-			newstate = checker_check(&pp->checker);
++			pp->mpp->stat_path_failures++;
++			return;
++		}
+ 
+-			if (newstate < 0) {
+-				condlog(2, "%s: unusable path", pp->dev);
+-				pathinfo(pp, conf->hwtable, 0);
+-				continue;
+-			}
+-			/*
+-			 * Async IO in flight. Keep the previous path state
+-			 * and reschedule as soon as possible
+-			 */
+-			if (newstate == PATH_PENDING) {
+-				pp->tick = 1;
+-				continue;
+-			}
+-			if (newstate != pp->state) {
+-				int oldstate = pp->state;
+-				pp->state = newstate;
+-				LOG_MSG(1, checker_message(&pp->checker));
++		/*
++		 * reinstate this path
++		 */
++		if (oldstate != PATH_UP &&
++		    oldstate != PATH_GHOST)
++			reinstate_path(pp, 1);
++		else
++			reinstate_path(pp, 0);
+ 
+-				/*
+-				 * upon state change, reset the checkint
+-				 * to the shortest delay
+-				 */
+-				pp->checkint = conf->checkint;
++		/*
++		 * schedule [defered] failback
++		 */
++		if (pp->mpp->pgfailback > 0)
++			pp->mpp->failback_tick =
++				pp->mpp->pgfailback + 1;
++		else if (pp->mpp->pgfailback == -FAILBACK_IMMEDIATE &&
++		    need_switch_pathgroup(pp->mpp, 1))
++			switch_pathgroup(pp->mpp);
+ 
+-				if (newstate == PATH_DOWN ||
+-				    newstate == PATH_SHAKY ||
+-				    update_multipath_strings(pp->mpp,
+-							     vecs->pathvec)) {
+-					/*
+-					 * proactively fail path in the DM
+-					 */
+-					if (oldstate == PATH_UP ||
+-					    oldstate == PATH_GHOST)
+-						fail_path(pp, 1);
+-					else
+-						fail_path(pp, 0);
++		/*
++		 * if at least one path is up in a group, and
++		 * the group is disabled, re-enable it
++		 */
++		if (newstate == PATH_UP)
++			enable_group(pp);
++	}
++	else if (newstate == PATH_UP || newstate == PATH_GHOST) {
++		LOG_MSG(4, checker_message(&pp->checker));
++		/*
++		 * double the next check delay.
++		 * max at conf->max_checkint
++		 */
++		if (pp->checkint < (conf->max_checkint / 2))
++			pp->checkint = 2 * pp->checkint;
++		else
++			pp->checkint = conf->max_checkint;
+ 
+-					/*
+-					 * cancel scheduled failback
+-					 */
+-					pp->mpp->failback_tick = 0;
++		pp->tick = pp->checkint;
++		condlog(4, "%s: delay next check %is",
++				pp->dev_t, pp->tick);
++	}
++	else if (newstate == PATH_DOWN)
++		LOG_MSG(2, checker_message(&pp->checker));
+ 
+-					pp->mpp->stat_path_failures++;
+-					continue;
+-				}
++	pp->state = newstate;
+ 
+-				/*
+-				 * reinstate this path
+-				 */
+-				if (oldstate != PATH_UP &&
+-				    oldstate != PATH_GHOST)
+-					reinstate_path(pp, 1);
+-				else
+-					reinstate_path(pp, 0);
++	/*
++	 * path prio refreshing
++	 */
++	condlog(4, "path prio refresh");
++	pathinfo(pp, conf->hwtable, DI_PRIO);
+ 
+-				/*
+-				 * schedule [defered] failback
+-				 */
+-				if (pp->mpp->pgfailback > 0)
+-					pp->mpp->failback_tick =
+-						pp->mpp->pgfailback + 1;
+-				else if (pp->mpp->pgfailback == -FAILBACK_IMMEDIATE &&
+-				    need_switch_pathgroup(pp->mpp, 1))
+-					switch_pathgroup(pp->mpp);
++	/*
++	 * pathgroup failback policy
++	 */
++	if (need_switch_pathgroup(pp->mpp, 0)) {
++		if (pp->mpp->pgfailback > 0 &&
++		    pp->mpp->failback_tick <= 0)
++			pp->mpp->failback_tick =
++				pp->mpp->pgfailback + 1;
++		else if (pp->mpp->pgfailback ==
++				-FAILBACK_IMMEDIATE)
++			switch_pathgroup(pp->mpp);
++	}
++}
+ 
+-				/*
+-				 * if at least one path is up in a group, and
+-				 * the group is disabled, re-enable it
+-				 */
+-				if (newstate == PATH_UP)
+-					enable_group(pp);
+-			}
+-			else if (newstate == PATH_UP || newstate == PATH_GHOST) {
+-				LOG_MSG(4, checker_message(&pp->checker));
+-				/*
+-				 * double the next check delay.
+-				 * max at conf->max_checkint
+-				 */
+-				if (pp->checkint < (conf->max_checkint / 2))
+-					pp->checkint = 2 * pp->checkint;
+-				else
+-					pp->checkint = conf->max_checkint;
++static void *
++checkerloop (void *ap)
++{
++	struct vectors *vecs;
++	struct path *pp;
++	int count = 0;
++	unsigned int i;
+ 
+-				pp->tick = pp->checkint;
+-				condlog(4, "%s: delay next check %is",
+-						pp->dev_t, pp->tick);
+-			}
+-			else if (newstate == PATH_DOWN)
+-				LOG_MSG(2, checker_message(&pp->checker));
++	mlockall(MCL_CURRENT | MCL_FUTURE);
++	vecs = (struct vectors *)ap;
++	condlog(2, "path checkers start up");
+ 
+-			pp->state = newstate;
++	/*
++	 * init the path check interval
++	 */
++	vector_foreach_slot (vecs->pathvec, pp, i) {
++		pp->checkint = conf->checkint;
++	}
+ 
+-			/*
+-			 * path prio refreshing
+-			 */
+-			condlog(4, "path prio refresh");
+-			pathinfo(pp, conf->hwtable, DI_PRIO);
++	while (1) {
++		pthread_cleanup_push(cleanup_lock, vecs->lock);
++		lock(vecs->lock);
++		condlog(4, "tick");
+ 
+-			if (need_switch_pathgroup(pp->mpp, 0)) {
+-				if (pp->mpp->pgfailback > 0 &&
+-				    pp->mpp->failback_tick <= 0)
+-					pp->mpp->failback_tick =
+-						pp->mpp->pgfailback + 1;
+-				else if (pp->mpp->pgfailback ==
+-						-FAILBACK_IMMEDIATE)
+-					switch_pathgroup(pp->mpp);
+-			}
++		vector_foreach_slot (vecs->pathvec, pp, i) {
++			check_path(vecs, pp);
+ 		}
+ 		defered_failback_tick(vecs->mpvec);
+ 		retry_count_tick(vecs->mpvec);
+@@ -1054,7 +1062,7 @@
+ 	path_discovery(vecs->pathvec, conf, DI_ALL);
+ 
+ 	vector_foreach_slot (vecs->pathvec, pp, i){
+-		if (filter_path(conf, pp)){
++		if (filter_path(conf, pp) > 0){
+ 			vector_del_slot(vecs->pathvec, i);
+ 			free_path(pp);
+ 			i--;
