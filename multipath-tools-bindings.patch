@@ -1,0 +1,32 @@
+--- multipath-tools-0.4.8/libmultipath/defaults.h	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools-0.4.8-bindings/libmultipath/defaults.h	2007-11-14 15:59:09.486442646 +0200
+@@ -19,6 +19,6 @@
+ #define DEFAULT_PIDFILE		"/var/run/multipathd.pid"
+ #define DEFAULT_SOCKET		"/var/run/multipathd.sock"
+ #define DEFAULT_CONFIGFILE	"/etc/multipath.conf"
+-#define DEFAULT_BINDINGS_FILE	"/var/lib/multipath/bindings"
++#define DEFAULT_BINDINGS_FILE	"/etc/multipath/bindings"
+ 
+ char * set_default (char * str);
+--- multipath-tools-0.4.8/multipath/multipath.conf.5	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools-0.4.8-bindings/multipath/multipath.conf.5	2007-11-14 15:59:21.003371363 +0200
+@@ -217,7 +217,7 @@
+ If set to 
+ .I yes
+ , using the bindings file
+-.I /var/lib/multipath/bindings
++.I /etc/multipath/bindings
+ to assign a persistent and unique alias to the multipath, in the form of mpath<n>.
+ If set to 
+ .I no
+--- multipath-tools-0.4.8/multipath.conf.annotated	2007-08-03 00:05:37.000000000 +0300
++++ multipath-tools-0.4.8-bindings/multipath.conf.annotated	2007-11-14 15:59:17.615098139 +0200
+@@ -115,7 +115,7 @@
+ #	# name    : user_friendly_names
+ #	# scope   : multipath
+ #	# desc    : If set to "yes", using the bindings file
+-#	#           /var/lib/multipath/bindings to assign a persistent and
++#	#           /etc/multipath/bindings to assign a persistent and
+ #	#           unique alias to the multipath, in the form of mpath<n>.
+ #	#           If set to "no" use the WWID as the alias. In either case
+ #	#           this be will be overriden by any specific aliases in this
