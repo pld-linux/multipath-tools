@@ -1,21 +1,23 @@
 # Conditional build:
-%bcond_without	initrd		# don't build initrd version
+%bcond_with	initrd		# build initrd version (very broken)
 #
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	0.9
+Release:	0.12
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	3563b863b408d07c46929b6e8c2c248c
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
+Source3:	%{name}-bindings
 URL:		http://christophe.varoqui.free.fr/
 Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
+Patch2:		%{name}-bindings.patch
 # was not used - is OPTIONS+="last_rule" still needed?
 #PatchX:	%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
@@ -63,9 +65,10 @@ device-mappera. Narzędzia to:
 
 %prep
 %setup -q
-%patch100 -p1
+#%patch100 -p1
 %patch0 -p1
 %patch1 -p1
+%patch2 -p1
 
 mv kpartx/README README.kpartx
 %{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
@@ -96,7 +99,7 @@ rm -rf $RPM_BUILD_ROOT
 install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
 install -D %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
 install -D %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
-install -d $RPM_BUILD_ROOT/var/lib/multipath
+install -D %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
 
@@ -131,10 +134,11 @@ fi
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
+%dir %{_sysconfdir}/multipath
+%config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
 %{_sysconfdir}/udev/rules.d/40-multipath.rules
 %{_sysconfdir}/udev/rules.d/kpartx.rules
 %attr(755,root,root) /lib/udev/kpartx_id
-%dir /var/lib/multipath
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/devmap_name.8*
 %{_mandir}/man8/kpartx.8*
