@@ -1,3 +1,4 @@
+#
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
 #
@@ -62,15 +63,16 @@ device-mappera. Narzędzia to:
 
 %package -n kpartx
 Summary:	Partition device manager for device-mapper devices
+Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
-multipath maps partionable
+multipath maps partionable.
 
 %description -n kpartx -l pl.UTF-8
 kpartx odwzorowuje liniowe mapy urządzeń na partycje urządzeń, co
-umożliwia tworzenie partycji na odwzorowaniach wielotrasowych
+umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
 %prep
 %setup -q
