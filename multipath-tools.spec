@@ -65,6 +65,7 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
+Requires:	udev >= 106
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
@@ -156,6 +157,6 @@ fi
 %files -n kpartx
 %defattr(644,root,root,755)
 %doc kpartx/README
-%attr(755,root,root) /lib/udev/kpartx_id
+%attr(755,root,root) /%{_lib}/udev/kpartx_id
 %{_sysconfdir}/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
