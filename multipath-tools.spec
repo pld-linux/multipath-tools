@@ -37,8 +37,6 @@ Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
 Conflicts:	udev < 1:070-4.1
-# limited due libaio availability
-ExclusiveArch:	%{ix86} %{x8664} alpha ia64 ppc ppc64 s390 s390x
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir	/sbin
