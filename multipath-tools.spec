@@ -19,6 +19,7 @@ Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		%{name}-bindings.patch
+Patch3:		%{name}-lib64.patch
 # was not used - is OPTIONS+="last_rule" still needed?
 #PatchX:	%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
@@ -65,7 +66,7 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
-Requires:	udev >= 106
+Requires:	udev-core >= 106
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
@@ -81,6 +82,9 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%if "%{_lib}" != "lib"
+%patch3 -p1
+%endif
 
 %{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
 
