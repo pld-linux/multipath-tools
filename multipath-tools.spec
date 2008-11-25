@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	3
+Release:	3.1
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -19,9 +19,6 @@ Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		%{name}-bindings.patch
-Patch3:		%{name}-lib64.patch
-# was not used - is OPTIONS+="last_rule" still needed?
-#PatchX:	%{name}-udev.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -37,7 +34,7 @@ Requires:	device-mapper >= 1.02.08
 Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
-Conflicts:	udev < 1:070-4.1
+Conflicts:	udev < 1:127
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir	/sbin
@@ -66,7 +63,7 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
-Requires:	udev-core >= 106
+Requires:	udev-core >= 127
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
@@ -78,13 +75,10 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
 %prep
 %setup -q
-#%patch100 -p1
+%patch100 -p1
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
-%if "%{_lib}" != "lib"
-%patch3 -p1
-%endif
 
 %{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
 
@@ -134,18 +128,11 @@ fi
 %files
 %defattr(644,root,root,755)
 %doc AUTHOR ChangeLog FAQ README TODO
-%attr(755,root,root) %{_sbindir}/devmap_name
 %attr(755,root,root) %{_sbindir}/kpartx
-%attr(755,root,root) %{_sbindir}/mpath_prio_alua
-%attr(755,root,root) %{_sbindir}/mpath_prio_balance_units
-%attr(755,root,root) %{_sbindir}/mpath_prio_emc
-%attr(755,root,root) %{_sbindir}/mpath_prio_hds_modular
-%attr(755,root,root) %{_sbindir}/mpath_prio_hp_sw
-%attr(755,root,root) %{_sbindir}/mpath_prio_netapp
-%attr(755,root,root) %{_sbindir}/mpath_prio_random
-%attr(755,root,root) %{_sbindir}/mpath_prio_rdac
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
+%dir /%{_lib}/multipath
+%attr(755,root,root) /%{_lib}/multipath/lib*.so
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
@@ -153,14 +140,12 @@ fi
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
 %{_sysconfdir}/udev/rules.d/40-multipath.rules
 %{_mandir}/man5/multipath.conf.5*
-%{_mandir}/man8/devmap_name.8*
-%{_mandir}/man8/mpath_prio_alua.8*
 %{_mandir}/man8/multipath.8*
 %{_mandir}/man8/multipathd.8*
 
 %files -n kpartx
 %defattr(644,root,root,755)
 %doc kpartx/README
-%attr(755,root,root) /%{_lib}/udev/kpartx_id
+%attr(755,root,root) /lib/udev/kpartx_id
 %{_sysconfdir}/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
