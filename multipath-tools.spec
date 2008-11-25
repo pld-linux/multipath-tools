@@ -80,8 +80,6 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %patch1 -p1
 %patch2 -p1
 
-%{__sed} -i -e 's,/lib/libdevmapper.so,/%{_lib}/libdevmapper.so,' libmultipath/Makefile
-
 %build
 %if %{with initrd}
 %{__make} -j1 \
@@ -131,8 +129,8 @@ fi
 %attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
-%dir /%{_lib}/multipath
-%attr(755,root,root) /%{_lib}/multipath/lib*.so
+%dir /lib/multipath
+%attr(755,root,root) /lib/multipath/lib*.so
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
