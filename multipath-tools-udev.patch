@@ -1,7 +1,0 @@
---- ./multipath/multipath.rules	2005-09-02 16:14:18.000000000 +0300
-+++ /tmp/40-multipath.rules	2005-10-16 02:50:17.000000000 +0300
-@@ -1,3 +1,3 @@
- # multipath wants the devmaps presented as meaninglful device names
- # so name them after their devmap name
--KERNEL="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", NAME="%k", SYMLINK="%c"
-+KERNEL=="dm-[0-9]*", PROGRAM="/sbin/devmap_name %M %m", NAME="%k", SYMLINK="%c" OPTIONS+="last_rule"
