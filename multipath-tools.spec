@@ -63,7 +63,7 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
-Requires:	udev-core >= 127
+Requires:	udev-core >= 1:127
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
