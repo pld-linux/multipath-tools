@@ -728,6 +728,19 @@ index 9b3aeca..43ae3f8 100644
  	int container;
  	int major;
  	int minor;
+diff --git a/kpartx/lopart.c b/kpartx/lopart.c
+index b18d6fa..33f312b 100644
+--- a/kpartx/lopart.c
++++ b/kpartx/lopart.c
+@@ -30,7 +30,7 @@
+ #if defined(__hppa__) || defined(__powerpc64__) || defined (__alpha__) \
+  || defined (__x86_64__)
+ typedef unsigned long __kernel_old_dev_t;
+-#elif defined(__powerpc__) || defined(__ia64__)
++#elif defined(__powerpc__) || defined(__ia64__) || (defined(__sparc__) && defined (__arch64__))
+ typedef unsigned int __kernel_old_dev_t;
+ #else
+ typedef unsigned short __kernel_old_dev_t;
 diff --git a/libcheckers/Makefile b/libcheckers/Makefile
 deleted file mode 100644
 index 6340a68..0000000
@@ -2130,7 +2143,7 @@ index 511f5ad..c70d429 100644
 -	rm -f core *.a *.o *.gz
 +	rm -f core *.a *.o *.gz *.so
 diff --git a/libmultipath/alias.c b/libmultipath/alias.c
-index ca434fe..8473187 100644
+index ca434fe..95506b4 100644
 --- a/libmultipath/alias.c
 +++ b/libmultipath/alias.c
 @@ -86,7 +86,7 @@ lock_bindings_file(int fd)
@@ -2207,7 +2220,7 @@ index ca434fe..8473187 100644
  
  static int
  lookup_binding(FILE *f, char *map_wwid, char **map_alias)
-@@ -200,7 +240,8 @@ lookup_binding(FILE *f, char *map_wwid, char **map_alias)
+@@ -200,9 +240,10 @@ lookup_binding(FILE *f, char *map_wwid, char **map_alias)
  		alias = strtok(buf, " \t");
  		if (!alias) /* blank line */
  			continue;
@@ -2215,8 +2228,11 @@ index ca434fe..8473187 100644
 +		curr_id = scan_devname(alias);
 +		if (curr_id >= id)
  			id = curr_id + 1;
- 		wwid = strtok(NULL, " \t");
+-		wwid = strtok(NULL, " \t");
++		wwid = strtok(NULL, "");
  		if (!wwid){
+ 			condlog(3,
+ 				"Ignoring malformed line %u in bindings file",
 @@ -221,7 +262,7 @@ lookup_binding(FILE *f, char *map_wwid, char **map_alias)
  	}
  	condlog(3, "No matching wwid [%s] in bindings file.", map_wwid);
@@ -4531,7 +4547,7 @@ index a25b3ad..fb917f4 100644
  	vector keywords;
  	vector mptable;
 diff --git a/libmultipath/configure.c b/libmultipath/configure.c
-index 3cd6041..285a8a2 100644
+index 3cd6041..83ee0ae 100644
 --- a/libmultipath/configure.c
 +++ b/libmultipath/configure.c
 @@ -14,8 +14,7 @@
@@ -4552,7 +4568,19 @@ index 3cd6041..285a8a2 100644
  
  extern int
  setup_map (struct multipath * mpp)
-@@ -130,7 +130,7 @@ pgcmp (struct multipath * mpp, struct multipath * cmpp)
+@@ -50,6 +50,11 @@ setup_map (struct multipath * mpp)
+ 	}
+ 
+ 	/*
++	 * free features, selector, and hwhandler properties if they are being reused
++	 */
++	free_multipath_attributes(mpp);
++
++	/*
+ 	 * properties selectors
+ 	 */
+ 	select_pgfailback(mpp);
+@@ -130,7 +135,7 @@ pgcmp (struct multipath * mpp, struct multipath * cmpp)
  }
  
  static void
@@ -4561,7 +4589,7 @@ index 3cd6041..285a8a2 100644
  {
  	struct multipath * cmpp;
  
-@@ -154,7 +154,7 @@ select_action (struct multipath * mpp, vector curmp)
+@@ -154,7 +159,7 @@ select_action (struct multipath * mpp, vector curmp)
  
  	if (!find_mp_by_wwid(curmp, mpp->wwid)) {
  		condlog(2, "%s: remove (wwid changed)", cmpp->alias);
@@ -4570,7 +4598,7 @@ index 3cd6041..285a8a2 100644
  		strncat(cmpp->wwid, mpp->wwid, WWID_SIZE);
  		drop_multipath(curmp, cmpp->wwid, KEEP_PATHS);
  		mpp->action = ACT_CREATE;
-@@ -169,6 +169,12 @@ select_action (struct multipath * mpp, vector curmp)
+@@ -169,6 +174,12 @@ select_action (struct multipath * mpp, vector curmp)
  			mpp->alias);
  		return;
  	}
@@ -4583,7 +4611,7 @@ index 3cd6041..285a8a2 100644
  	if (cmpp->size != mpp->size) {
  		mpp->action = ACT_RELOAD;
  		condlog(3, "%s: set ACT_RELOAD (size change)",
-@@ -183,14 +189,14 @@ select_action (struct multipath * mpp, vector curmp)
+@@ -183,14 +194,14 @@ select_action (struct multipath * mpp, vector curmp)
  			mpp->alias);
  		return;
  	}
@@ -4600,7 +4628,7 @@ index 3cd6041..285a8a2 100644
  		    strlen(mpp->selector))) {
  		mpp->action = ACT_RELOAD;
  		condlog(3, "%s: set ACT_RELOAD (selector change)",
-@@ -203,7 +209,7 @@ select_action (struct multipath * mpp, vector curmp)
+@@ -203,7 +214,7 @@ select_action (struct multipath * mpp, vector curmp)
  			mpp->alias, cmpp->minio, mpp->minio);
  		return;
  	}
@@ -4609,7 +4637,7 @@ index 3cd6041..285a8a2 100644
  		mpp->action = ACT_RELOAD;
  		condlog(3, "%s: set ACT_RELOAD (path group number change)",
  			mpp->alias);
-@@ -330,28 +336,19 @@ domap (struct multipath * mpp)
+@@ -330,28 +341,19 @@ domap (struct multipath * mpp)
  			break;
  		}
  
@@ -4645,7 +4673,7 @@ index 3cd6041..285a8a2 100644
  		break;
  
  	case ACT_RENAME:
-@@ -364,18 +361,24 @@ domap (struct multipath * mpp)
+@@ -364,18 +366,24 @@ domap (struct multipath * mpp)
  
  	if (r) {
  		/*
@@ -4680,7 +4708,7 @@ index 3cd6041..285a8a2 100644
  		return DOMAP_OK;
  	}
  	return DOMAP_FAIL;
-@@ -404,7 +407,7 @@ deadmap (struct multipath * mpp)
+@@ -404,7 +412,7 @@ deadmap (struct multipath * mpp)
  }
  
  extern int
@@ -4689,7 +4717,7 @@ index 3cd6041..285a8a2 100644
  {
  	int r = 1;
  	int k, i;
-@@ -417,6 +420,11 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -417,6 +425,11 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  
  	memset(empty_buff, 0, WWID_SIZE);
  
@@ -4701,7 +4729,7 @@ index 3cd6041..285a8a2 100644
  	vector_foreach_slot (pathvec, pp1, k) {
  		/* skip this path for some reason */
  
-@@ -440,7 +448,8 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -440,7 +453,8 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  		/*
  		 * at this point, we know we really got a new mp
  		 */
@@ -4711,7 +4739,7 @@ index 3cd6041..285a8a2 100644
  			return 1;
  
  		if (pp1->priority == PRIO_UNDEF)
-@@ -448,7 +457,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -448,7 +462,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  
  		if (!mpp->paths) {
  			condlog(0, "%s: skip coalesce (no paths)", mpp->alias);
@@ -4720,7 +4748,7 @@ index 3cd6041..285a8a2 100644
  			continue;
  		}
  		
-@@ -476,12 +485,12 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -476,12 +490,12 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  		verify_paths(mpp, vecs, NULL);
  		
  		if (setup_map(mpp)) {
@@ -4735,7 +4763,7 @@ index 3cd6041..285a8a2 100644
  
  		r = domap(mpp);
  
-@@ -490,7 +499,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -490,7 +504,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  				   "for create/reload map",
  				mpp->alias, r);
  			if (r == DOMAP_FAIL) {
@@ -4744,7 +4772,7 @@ index 3cd6041..285a8a2 100644
  				continue;
  			} else /* if (r == DOMAP_RETRY) */
  				return r;
-@@ -518,7 +527,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -518,7 +532,7 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  				vector_set_slot(newmp, mpp);
  			}
  			else
@@ -4753,7 +4781,7 @@ index 3cd6041..285a8a2 100644
  		}
  	}
  	/*
-@@ -538,9 +547,9 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
+@@ -538,9 +552,9 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid)
  			if ((j = find_slot(newmp, (void *)mpp)) != -1)
  				vector_del_slot(newmp, j);
  
@@ -4870,7 +4898,7 @@ index df7d971..87b155e 100644
  #define DEFAULT_SOCKET		"/var/run/multipathd.sock"
  #define DEFAULT_CONFIGFILE	"/etc/multipath.conf"
 diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
-index d6991ba..70e10c2 100644
+index d6991ba..78204ff 100644
 --- a/libmultipath/devmapper.c
 +++ b/libmultipath/devmapper.c
 @@ -14,8 +14,7 @@
@@ -4965,7 +4993,12 @@ index d6991ba..70e10c2 100644
  	if (uuid){
  		prefixed_uuid = MALLOC(UUID_PREFIX_LEN + strlen(uuid) + 1);
  		if (!prefixed_uuid) {
-@@ -220,11 +215,59 @@ dm_addmap (int task, const char *name, const char *target,
+@@ -216,15 +211,63 @@ dm_addmap (int task, const char *name, const char *target,
+ 
+ 	freeout:
+ 	if (prefixed_uuid)
+-		free(prefixed_uuid);
++		FREE(prefixed_uuid);
  
  	addout:
  	dm_task_destroy (dmt);
@@ -4994,14 +5027,14 @@ index d6991ba..70e10c2 100644
 +#define ADDMAP_RW 0
 +#define ADDMAP_RO 1
 +
- extern int
--dm_map_present (char * str)
++extern int
 +dm_addmap_create (const char *name, const char *params,
 +		  unsigned long long size, const char *uuid) {
 +	return _dm_addmap_create(name, params, size, uuid, ADDMAP_RW);
 +}
 +
-+extern int
+ extern int
+-dm_map_present (char * str)
 +dm_addmap_create_ro (const char *name, const char *params,
 +		  unsigned long long size, const char *uuid) {
 +	return _dm_addmap_create(name, params, size, uuid, ADDMAP_RO);
@@ -5080,7 +5113,7 @@ index d6991ba..70e10c2 100644
  int
  dm_get_minor (char * mapname)
  {
-@@ -473,16 +516,16 @@ out:
+@@ -473,17 +516,17 @@ out:
  	dm_task_destroy(dmt);
  	return r;
  }
@@ -5096,10 +5129,12 @@ index d6991ba..70e10c2 100644
  		return 0;
  
 -	if (dm_type(mapname, type) <= 0)
+-		return 1;
 +	if (dm_type(mapname, TGT_MPATH) <= 0)
- 		return 1;
++		return 0; /* nothing to do */
  
  	if (dm_remove_partmaps(mapname))
+ 		return 1;
 @@ -491,7 +534,7 @@ dm_flush_map (char * mapname, char * type)
  	if (dm_get_opencount(mapname)) {
  		condlog(2, "%s: map in use", mapname);
@@ -5123,7 +5158,7 @@ index d6991ba..70e10c2 100644
  
  	do {
 -		r += dm_flush_map(names->name, type);
-+		r += dm_flush_map(names->name);
++		r |= dm_flush_map(names->name);
  		next = names->next;
  		names = (void *) names + next;
  	} while (next);
@@ -5165,7 +5200,7 @@ index d6991ba..70e10c2 100644
  	} while (next);
  
  	r = 0;
-@@ -717,7 +760,7 @@ out:
+@@ -717,32 +760,34 @@ out:
  }
  
  extern int
@@ -5174,16 +5209,42 @@ index d6991ba..70e10c2 100644
  {
  	vector vec;
  	struct multipath *mpp;
-@@ -728,7 +771,7 @@ dm_get_name(char *uuid, char *type, char *name)
+-	int i;
++	int i, rc = 0;
+ 
+ 	vec = vector_alloc();
+ 
  	if (!vec)
  		return 0;
  
 -	if (dm_get_maps(vec, type)) {
+-		vector_free(vec);
+-		return 0;
 +	if (dm_get_maps(vec)) {
- 		vector_free(vec);
- 		return 0;
++		goto out;
  	}
-@@ -827,7 +870,7 @@ bad:
+ 
+ 	vector_foreach_slot(vec, mpp, i) {
+ 		if (!strcmp(uuid, mpp->wwid)) {
+-			vector_free(vec);
+ 			strcpy(name, mpp->alias);
+-			return 1;
++			rc=1;
++			break;
+ 		}
+ 	}
+-
++out:
++	vector_foreach_slot(vec, mpp, i) {
++		free_multipath(mpp, KEEP_PATHS);
++	}
+ 	vector_free(vec);
+-	return 0;
++	return rc;
+ }
+ 
+ int
+@@ -827,7 +872,7 @@ bad:
  }
  
  int
@@ -5192,7 +5253,7 @@ index d6991ba..70e10c2 100644
  {
  	struct dm_task *dmt;
  	struct dm_names *names;
-@@ -861,7 +904,7 @@ dm_remove_partmaps (char * mapname)
+@@ -861,7 +906,7 @@ dm_remove_partmaps (char * mapname)
  		    /*
  		     * if devmap target is "linear"
  		     */
@@ -5201,7 +5262,7 @@ index d6991ba..70e10c2 100644
  
  		    /*
  		     * and the multipath mapname and the part mapname start
-@@ -884,7 +927,7 @@ dm_remove_partmaps (char * mapname)
+@@ -884,7 +929,7 @@ dm_remove_partmaps (char * mapname)
  		     */
  		    strstr(params, dev_t)
  		   ) {
@@ -5210,7 +5271,7 @@ index d6991ba..70e10c2 100644
  				 * then it's a kpartx generated partition.
  				 * remove it.
  				 */
-@@ -914,7 +957,7 @@ dm_get_info (char * mapname, struct dm_info ** dmi)
+@@ -914,7 +959,7 @@ dm_get_info (char * mapname, struct dm_info ** dmi)
  {
  	int r = 1;
  	struct dm_task *dmt = NULL;
@@ -5219,7 +5280,7 @@ index d6991ba..70e10c2 100644
  	if (!mapname)
  		return 1;
  
-@@ -984,7 +1027,7 @@ dm_rename_partmaps (char * old, char * new)
+@@ -984,7 +1029,7 @@ dm_rename_partmaps (char * old, char * new)
  		    /*
  		     * if devmap target is "linear"
  		     */
@@ -5228,7 +5289,7 @@ index d6991ba..70e10c2 100644
  
  		    /*
  		     * and the multipath mapname and the part mapname start
-@@ -1002,7 +1045,7 @@ dm_rename_partmaps (char * old, char * new)
+@@ -1002,7 +1047,7 @@ dm_rename_partmaps (char * old, char * new)
  		     */
  		    strstr(buff, dev_t)
  		   ) {
@@ -5237,7 +5298,7 @@ index d6991ba..70e10c2 100644
  				 * then it's a kpartx generated partition.
  				 * Rename it.
  				 */
-@@ -1040,7 +1083,7 @@ dm_rename (char * old, char * new)
+@@ -1040,7 +1085,7 @@ dm_rename (char * old, char * new)
  
  	if (!dm_task_set_newname(dmt, new))
  		goto out;
@@ -5840,7 +5901,7 @@ index 4572a7d..2429a93 100644
  	install_keyword("rr_weight", &hw_weight_handler, &snprint_hw_rr_weight);
  	install_keyword("no_path_retry", &hw_no_path_retry_handler, &snprint_hw_no_path_retry);
 diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
-index c842eb0..bbb9f9b 100644
+index c842eb0..9ae2b8f 100644
 --- a/libmultipath/discovery.c
 +++ b/libmultipath/discovery.c
 @@ -11,8 +11,7 @@
@@ -5919,7 +5980,7 @@ index c842eb0..bbb9f9b 100644
  static int
  opennode (char * dev, int mode)
  {
-@@ -244,11 +242,11 @@ devt2devname (char *devname, char *devt)
+@@ -244,18 +242,22 @@ devt2devname (char *devname, char *devt)
  		condlog(0, "Cannot open /proc/partitions");
  		return 1;
  	}
@@ -5933,7 +5994,27 @@ index c842eb0..bbb9f9b 100644
  			continue;
  		}
  		if (r != 3)
-@@ -280,62 +278,62 @@ int
+ 			continue;
+ 
+ 		if ((major == tmpmaj) && (minor == tmpmin)) {
+-			sprintf(block_path, "/sys/block/%s", dev);
++			if (snprintf(block_path, FILE_NAME_SIZE, "/sys/block/%s", dev) >= FILE_NAME_SIZE) {
++				condlog(0, "device name %s is too long\n", dev);
++				fclose(fd);
++				return 1;
++			}
+ 			break;
+ 		}
+ 	}
+@@ -273,6 +275,7 @@ devt2devname (char *devname, char *devt)
+ 		condlog(0, "sysfs entry %s is not a directory\n", block_path);
+ 		return 1;
+ 	}
++	basename(block_path, devname);
+ 	return 0;
+ }
+ 
+@@ -280,62 +283,62 @@ int
  do_inq(int sg_fd, int cmddt, int evpd, unsigned int pg_op,
         void *resp, int mx_resp_len, int noisy)
  {
@@ -6043,7 +6124,7 @@ index c842eb0..bbb9f9b 100644
  
  	if (0 == do_inq(fd, 0, 1, 0x80, buff, MX_ALLOC_LEN, 0)) {
  		len = buff[3];
-@@ -347,7 +345,7 @@ get_serial (char * str, int maxlen, int fd)
+@@ -347,7 +350,7 @@ get_serial (char * str, int maxlen, int fd)
  		}
  		return 0;
  	}
@@ -6052,7 +6133,7 @@ index c842eb0..bbb9f9b 100644
  }
  
  static int
-@@ -361,10 +359,13 @@ get_inq (char * vendor, char * product, char * rev, int fd)
+@@ -361,10 +364,13 @@ get_inq (char * vendor, char * product, char * rev, int fd)
  	if (0 == do_inq(fd, 0, 0, 0, buff, MX_ALLOC_LEN, 0)) {
  		memcpy(vendor, buff + 8, 8);
  		vendor[8] = '\0';
@@ -6066,7 +6147,7 @@ index c842eb0..bbb9f9b 100644
  		return 0;
  	}
  	return 1;
-@@ -456,7 +457,7 @@ ccw_sysfs_pathinfo (struct path * pp, struct sysfs_device * parent)
+@@ -456,7 +462,7 @@ ccw_sysfs_pathinfo (struct path * pp, struct sysfs_device * parent)
  
  	/*
  	 * host / bus / target / lun
@@ -6075,7 +6156,7 @@ index c842eb0..bbb9f9b 100644
  	basename(parent->devpath, attr_path);
  	pp->sg_id.lun = 0;
  	sscanf(attr_path, "%i.%i.%x",
-@@ -528,6 +529,35 @@ struct sysfs_device *sysfs_device_from_path(struct path *pp)
+@@ -528,6 +534,35 @@ struct sysfs_device *sysfs_device_from_path(struct path *pp)
  	return sysfs_device_get(sysdev);
  }
  
@@ -6111,7 +6192,7 @@ index c842eb0..bbb9f9b 100644
  extern int
  sysfs_pathinfo(struct path * pp)
  {
-@@ -546,6 +576,9 @@ sysfs_pathinfo(struct path * pp)
+@@ -546,6 +581,9 @@ sysfs_pathinfo(struct path * pp)
  	if (!parent)
  		parent = pp->sysdev;
  
@@ -6121,7 +6202,7 @@ index c842eb0..bbb9f9b 100644
  	condlog(3, "%s: subsystem = %s", pp->dev, parent->subsystem);
  
  	if (!strncmp(parent->subsystem, "scsi",4))
-@@ -615,10 +648,15 @@ get_state (struct path * pp)
+@@ -615,10 +653,15 @@ get_state (struct path * pp)
  		if (checker_init(c, &pp->mpp->mpcontext))
  			return 1;
  	}
@@ -6139,7 +6220,7 @@ index c842eb0..bbb9f9b 100644
  			pp->dev, checker_message(c));
  	return 0;
  }
-@@ -626,27 +664,22 @@ get_state (struct path * pp)
+@@ -626,27 +669,22 @@ get_state (struct path * pp)
  static int
  get_prio (struct path * pp)
  {
@@ -6179,7 +6260,7 @@ index c842eb0..bbb9f9b 100644
  	return 0;
  }
  
-@@ -662,7 +695,7 @@ get_uid (struct path * pp)
+@@ -662,7 +700,7 @@ get_uid (struct path * pp)
  		condlog(0, "error formatting uid callout command");
  		memset(pp->wwid, 0, WWID_SIZE);
  	} else if (execute_program(buff, pp->wwid, WWID_SIZE)) {
@@ -6188,7 +6269,7 @@ index c842eb0..bbb9f9b 100644
  		memset(pp->wwid, 0, WWID_SIZE);
  		return 1;
  	}
-@@ -723,5 +756,6 @@ blank:
+@@ -723,5 +761,6 @@ blank:
  	 */
  	memset(pp->wwid, 0, WWID_SIZE);
  	pp->state = PATH_DOWN;
@@ -7241,8 +7322,24 @@ index 5a82b6a..a1d4a10 100644
  	free_logarea();
 -}	
 +}
+diff --git a/libmultipath/memory.c b/libmultipath/memory.c
+index 71dfe40..bd6ae5e 100644
+--- a/libmultipath/memory.c
++++ b/libmultipath/memory.c
+@@ -459,9 +459,8 @@ dbg_realloc(void *buffer, unsigned long size, char *file, char *function,
+ 	if (debug & 1)
+ 		printf("realloc [%3d:%3d] %p, %4ld %s %d %s -> %p %4ld %s %d %s\n",
+ 		       i, number_alloc_list, alloc_list[i].ptr,
+-		       alloc_list[i].size, file, line, function, buf, size,
+-		       alloc_list[i].file, alloc_list[i].line,
+-		       alloc_list[i].func);
++		       alloc_list[i].size, alloc_list[i].file, alloc_list[i].line, alloc_list[i].func,
++		       buf, size, file, line, function);
+ 
+ 	alloc_list[i].ptr = buf;
+ 	alloc_list[i].size = size;
 diff --git a/libmultipath/parser.c b/libmultipath/parser.c
-index f9c555e..070745d 100644
+index f9c555e..f1fdeb8 100644
 --- a/libmultipath/parser.c
 +++ b/libmultipath/parser.c
 @@ -1,11 +1,11 @@
@@ -7288,20 +7385,30 @@ index f9c555e..070745d 100644
  		cp++;
  
  	/* Return if there is only white spaces */
-@@ -241,8 +241,10 @@ alloc_strvec(char *string)
+@@ -239,10 +239,20 @@ alloc_strvec(char *string)
+ 				in_string = 0;
+ 			else
  				in_string = 1;
++		} else if (!in_string && (*cp == '{' || *cp == '}')) {
++			token = MALLOC(2);
  
++			if (!token)
++				goto out;
++
++			*(token) = *cp;
++			*(token + 1) = '\0';
++			cp++;
  		} else {
 -			while ((in_string || !isspace((int) *cp)) && *cp
 -				!= '\0' && *cp != '"')
 +			while ((in_string ||
 +				(!isspace((int) *cp) && isascii((int) *cp) &&
-+				 *cp != '!' && *cp != '#')) &&
-+			       *cp != '\0' && *cp != '"')
++				 *cp != '!' && *cp != '#' && *cp != '{' &&
++				 *cp != '}')) && *cp != '\0' && *cp != '"')
  				cp++;
  			strlen = cp - start;
  			token = MALLOC(strlen + 1);
-@@ -255,7 +257,8 @@ alloc_strvec(char *string)
+@@ -255,7 +265,8 @@ alloc_strvec(char *string)
  		}
  		vector_set_slot(strvec, token);
  
@@ -7311,7 +7418,7 @@ index f9c555e..070745d 100644
  			cp++;
  		if (*cp == '\0' || *cp == '!' || *cp == '#')
  			return strvec;
-@@ -447,7 +450,7 @@ process_stream(vector keywords)
+@@ -447,7 +458,7 @@ process_stream(vector keywords)
  				break;
  			}
  		}
@@ -7468,7 +7575,7 @@ index 0ac7448..0c7eee8 100644
  
  }
 diff --git a/libmultipath/print.c b/libmultipath/print.c
-index 01a157a..595067b 100644
+index 01a157a..a2253be 100644
 --- a/libmultipath/print.c
 +++ b/libmultipath/print.c
 @@ -7,9 +7,9 @@
@@ -7667,7 +7774,21 @@ index 01a157a..595067b 100644
  	}
  }
  
-@@ -371,6 +413,7 @@ struct multipath_data mpd[] = {
+@@ -364,6 +406,13 @@ snprint_path_size (char * buff, size_t len, struct path * pp)
+ 	return snprint_size(buff, len, pp->size);
+ }
+ 
++static int
++snprint_path_checker (char * buff, size_t len, struct path * pp)
++{
++	struct checker * c = &pp->checker;
++	return snprint_str(buff, len, c->name);
++}
++
+ struct multipath_data mpd[] = {
+ 	{'n', "name",          0, snprint_name},
+ 	{'w', "uuid",          0, snprint_multipath_uuid},
+@@ -371,6 +420,7 @@ struct multipath_data mpd[] = {
  	{'F', "failback",      0, snprint_failback},
  	{'Q', "queueing",      0, snprint_queueing},
  	{'N', "paths",         0, snprint_nb_paths},
@@ -7675,7 +7796,7 @@ index 01a157a..595067b 100644
  	{'t', "dm-st",         0, snprint_dm_map_state},
  	{'S', "size",          0, snprint_multipath_size},
  	{'f', "features",      0, snprint_features},
-@@ -381,6 +424,7 @@ struct multipath_data mpd[] = {
+@@ -381,6 +431,7 @@ struct multipath_data mpd[] = {
  	{'2', "map_loads",     0, snprint_map_loads},
  	{'3', "total_q_time",  0, snprint_total_q_time},
  	{'4', "q_timeouts",    0, snprint_q_timeouts},
@@ -7683,15 +7804,18 @@ index 01a157a..595067b 100644
  	{0, NULL, 0 , NULL}
  };
  
-@@ -390,6 +434,7 @@ struct path_data pd[] = {
+@@ -390,8 +441,10 @@ struct path_data pd[] = {
  	{'d', "dev",           0, snprint_dev},
  	{'D', "dev_t",         0, snprint_dev_t},
  	{'t', "dm_st",         0, snprint_dm_path_state},
 +	{'o', "dev_st",        0, snprint_offline},
  	{'T', "chk_st",        0, snprint_chk_state},
  	{'s', "vend/prod/rev", 0, snprint_vpr},
++	{'c', "checker",       0, snprint_path_checker},
  	{'C', "next_check",    0, snprint_next_check},
-@@ -402,17 +447,41 @@ struct pathgroup_data pgd[] = {
+ 	{'p', "pri",           0, snprint_pri},
+ 	{'S', "size",          0, snprint_path_size},
+@@ -402,17 +455,41 @@ struct pathgroup_data pgd[] = {
  	{'s', "selector",      0, snprint_pg_selector},
  	{'p', "pri",           0, snprint_pg_pri},
  	{'t', "dm_st",         0, snprint_pg_state},
@@ -7735,7 +7859,7 @@ index 01a157a..595067b 100644
  
  		vector_foreach_slot (pathvec, pp, i) {
  			pd[j].snprint(buff, MAX_FIELD_LEN, pp);
-@@ -421,15 +490,27 @@ get_path_layout (vector pathvec)
+@@ -421,15 +498,27 @@ get_path_layout (vector pathvec)
  	}
  }
  
@@ -7765,7 +7889,7 @@ index 01a157a..595067b 100644
  
  		vector_foreach_slot (mpvec, mpp, i) {
  			mpd[j].snprint(buff, MAX_FIELD_LEN, mpp);
-@@ -483,6 +564,8 @@ snprint_multipath_header (char * line, int len, char * format)
+@@ -483,6 +572,8 @@ snprint_multipath_header (char * line, int len, char * format)
  	int fwd;
  	struct multipath_data * data;
  
@@ -7774,7 +7898,7 @@ index 01a157a..595067b 100644
  	do {
  		if (!TAIL)
  			break;
-@@ -493,17 +576,15 @@ snprint_multipath_header (char * line, int len, char * format)
+@@ -493,17 +584,15 @@ snprint_multipath_header (char * line, int len, char * format)
  			continue;
  		}
  		f++;
@@ -7797,7 +7921,7 @@ index 01a157a..595067b 100644
  	return (c - line);
  }
  
-@@ -518,6 +599,8 @@ snprint_multipath (char * line, int len, char * format,
+@@ -518,6 +607,8 @@ snprint_multipath (char * line, int len, char * format,
  	struct multipath_data * data;
  	char buff[MAX_FIELD_LEN] = {};
  
@@ -7806,7 +7930,7 @@ index 01a157a..595067b 100644
  	do {
  		if (!TAIL)
  			break;
-@@ -528,19 +611,17 @@ snprint_multipath (char * line, int len, char * format,
+@@ -528,19 +619,17 @@ snprint_multipath (char * line, int len, char * format,
  			continue;
  		}
  		f++;
@@ -7831,7 +7955,7 @@ index 01a157a..595067b 100644
  	return (c - line);
  }
  
-@@ -553,6 +634,8 @@ snprint_path_header (char * line, int len, char * format)
+@@ -553,6 +642,8 @@ snprint_path_header (char * line, int len, char * format)
  	int fwd;
  	struct path_data * data;
  
@@ -7840,7 +7964,7 @@ index 01a157a..595067b 100644
  	do {
  		if (!TAIL)
  			break;
-@@ -563,17 +646,15 @@ snprint_path_header (char * line, int len, char * format)
+@@ -563,17 +654,15 @@ snprint_path_header (char * line, int len, char * format)
  			continue;
  		}
  		f++;
@@ -7863,7 +7987,7 @@ index 01a157a..595067b 100644
  	return (c - line);
  }
  
-@@ -588,6 +669,8 @@ snprint_path (char * line, int len, char * format,
+@@ -588,6 +677,8 @@ snprint_path (char * line, int len, char * format,
  	struct path_data * data;
  	char buff[MAX_FIELD_LEN];
  
@@ -7872,7 +7996,7 @@ index 01a157a..595067b 100644
  	do {
  		if (!TAIL)
  			break;
-@@ -598,18 +681,16 @@ snprint_path (char * line, int len, char * format,
+@@ -598,18 +689,16 @@ snprint_path (char * line, int len, char * format,
  			continue;
  		}
  		f++;
@@ -7896,7 +8020,7 @@ index 01a157a..595067b 100644
  	return (c - line);
  }
  
-@@ -624,6 +705,8 @@ snprint_pathgroup (char * line, int len, char * format,
+@@ -624,6 +713,8 @@ snprint_pathgroup (char * line, int len, char * format,
  	struct pathgroup_data * data;
  	char buff[MAX_FIELD_LEN];
  
@@ -7905,7 +8029,7 @@ index 01a157a..595067b 100644
  	do {
  		if (!TAIL)
  			break;
-@@ -634,18 +717,16 @@ snprint_pathgroup (char * line, int len, char * format,
+@@ -634,18 +725,16 @@ snprint_pathgroup (char * line, int len, char * format,
  			continue;
  		}
  		f++;
@@ -7929,7 +8053,7 @@ index 01a157a..595067b 100644
  	return (c - line);
  }
  
-@@ -668,31 +749,38 @@ snprint_multipath_topology (char * buff, int len, struct multipath * mpp,
+@@ -668,31 +757,38 @@ snprint_multipath_topology (char * buff, int len, struct multipath * mpp,
  	struct pathgroup * pgp = NULL;
  	char style[64];
  	char * c = style;
@@ -7974,7 +8098,7 @@ index 01a157a..595067b 100644
  	if (fwd > len)
  		return len;
  
-@@ -700,15 +788,26 @@ snprint_multipath_topology (char * buff, int len, struct multipath * mpp,
+@@ -700,15 +796,26 @@ snprint_multipath_topology (char * buff, int len, struct multipath * mpp,
  		return fwd;
  
  	vector_foreach_slot (mpp->pg, pgp, j) {
@@ -8005,7 +8129,7 @@ index 01a157a..595067b 100644
  			if (fwd > len)
  				return len;
  		}
-@@ -854,7 +953,6 @@ snprint_defaults (char * buff, int len)
+@@ -854,7 +961,6 @@ snprint_defaults (char * buff, int len)
  	if (fwd > len)
  		return len;
  	return fwd;
@@ -8013,7 +8137,7 @@ index 01a157a..595067b 100644
  }
  
  static int
-@@ -920,7 +1018,7 @@ snprint_blacklist_report (char * buff, int len)
+@@ -920,7 +1026,7 @@ snprint_blacklist_report (char * buff, int len)
  	if ((len - fwd - threshold) <= 0)
  		return len;
  	fwd += snprintf(buff + fwd, len - fwd, "device node rules:\n"
@@ -8022,7 +8146,7 @@ index 01a157a..595067b 100644
  	if (!snprint_blacklist_group(buff, len, &fwd, &conf->blist_devnode))
  		return len;
  
-@@ -933,7 +1031,7 @@ snprint_blacklist_report (char * buff, int len)
+@@ -933,7 +1039,7 @@ snprint_blacklist_report (char * buff, int len)
  	if ((len - fwd - threshold) <= 0)
  		return len;
  	fwd += snprintf(buff + fwd, len - fwd, "wwid rules:\n"
@@ -8031,7 +8155,7 @@ index 01a157a..595067b 100644
  	if (snprint_blacklist_group(buff, len, &fwd, &conf->blist_wwid) == 0)
  		return len;
  
-@@ -946,7 +1044,7 @@ snprint_blacklist_report (char * buff, int len)
+@@ -946,7 +1052,7 @@ snprint_blacklist_report (char * buff, int len)
  	if ((len - fwd - threshold) <= 0)
  		return len;
  	fwd += snprintf(buff + fwd, len - fwd, "device rules:\n"
@@ -8040,7 +8164,7 @@ index 01a157a..595067b 100644
  	if (snprint_blacklist_devgroup(buff, len, &fwd, &conf->blist_device) == 0)
  		return len;
  
-@@ -1098,6 +1196,30 @@ snprint_blacklist_except (char * buff, int len)
+@@ -1098,6 +1204,30 @@ snprint_blacklist_except (char * buff, int len)
  }
  
  extern int
@@ -8071,7 +8195,7 @@ index 01a157a..595067b 100644
  snprint_devices (char * buff, int len, struct vectors *vecs)
  {
  	DIR *blkdir;
-@@ -1118,15 +1240,16 @@ snprint_devices (char * buff, int len, struct vectors *vecs)
+@@ -1118,15 +1248,16 @@ snprint_devices (char * buff, int len, struct vectors *vecs)
  		return len;
  	fwd += snprintf(buff + fwd, len - fwd, "available block devices:\n");
  
@@ -8092,7 +8216,7 @@ index 01a157a..595067b 100644
  			continue;
  
  		if (S_ISDIR(statbuf.st_mode) == 0)
-@@ -1135,18 +1258,20 @@ snprint_devices (char * buff, int len, struct vectors *vecs)
+@@ -1135,18 +1266,20 @@ snprint_devices (char * buff, int len, struct vectors *vecs)
  		if ((len - fwd - threshold)  <= 0)
  			return len;
  
@@ -8119,7 +8243,7 @@ index 01a157a..595067b 100644
  		fwd += snprintf(buff + fwd, len - fwd, "\n");
  	}
  	closedir(blkdir);
-@@ -1197,13 +1322,19 @@ print_map (struct multipath * mpp)
+@@ -1197,13 +1330,19 @@ print_map (struct multipath * mpp)
  {
  	if (mpp->size && mpp->params)
  		printf("0 %llu %s %s\n",
@@ -8140,7 +8264,7 @@ index 01a157a..595067b 100644
  	int i;
  	struct path * pp;
  	char line[MAX_LINE_LEN];
-@@ -1213,15 +1344,15 @@ print_all_paths (vector pathvec, int banner)
+@@ -1213,15 +1352,15 @@ print_all_paths (vector pathvec, int banner)
  			fprintf(stdout, "===== no paths =====\n");
  		return;
  	}
@@ -11389,7 +11513,7 @@ index 0223924..468ce5f 100644
 -#endif /* DAEMON */
  #endif /* _WAITER_H */
 diff --git a/multipath-tools.spec.in b/multipath-tools.spec.in
-index 3caede6..b224779 100644
+index 3caede6..389c07c 100644
 --- a/multipath-tools.spec.in
 +++ b/multipath-tools.spec.in
 @@ -22,7 +22,6 @@ are :
@@ -11400,7 +11524,7 @@ index 3caede6..b224779 100644
  * kpartx :      maps linear devmaps upon device partitions, which makes
                  multipath maps partionable
  
-@@ -41,20 +40,10 @@ rm -rf $RPM_BUILD_ROOT
+@@ -41,23 +40,17 @@ rm -rf $RPM_BUILD_ROOT
  
  %files
  %defattr(-,root,root,-)
@@ -11419,22 +11543,44 @@ index 3caede6..b224779 100644
  %{prefix}/usr/share/man/man8/kpartx.8.gz
 -%{prefix}/usr/share/man/man8/mpath_prio_alua.8.gz
  %{prefix}/usr/share/man/man8/multipathd.8.gz
++%{prefix}/usr/share/man/man5/multipath.conf.5.gz
  %{prefix}/sbin/multipathd
  %{prefix}/etc/udev/rules.d/multipath.rules
++%{prefix}/etc/udev/rules.d/kpartx.rules
++%{prefix}/lib/udev/kpartx_id
++%{prefix}/lib/multipath/*.so
+ 
+ 
+ %changelog
 diff --git a/multipath.conf.annotated b/multipath.conf.annotated
-index e6cfe9a..3653477 100644
+index e6cfe9a..bf15dc3 100644
 --- a/multipath.conf.annotated
 +++ b/multipath.conf.annotated
-@@ -38,7 +38,7 @@
+@@ -19,6 +19,7 @@
+ #	# name    : polling_interval
+ #	# scope   : multipathd
+ #	# desc    : interval between two path checks in seconds
++#	# values  : n > 0
+ #	# default : 5
+ #	#
+ #	polling_interval 10
+@@ -38,7 +39,14 @@
  #	# scope   : multipath
  #	# desc    : the default path grouping policy to apply to unspecified
  #	#           multipaths
 -#	# default : multibus
++#	# values  : failover           = 1 path per priority group
++#	#           multibus           = all valid paths in 1 priority group
++#	#           group_by_serial    = 1 priority group per detected serial
++#	#                                number
++#	#           group_by_prio      = 1 priority group per path priority
++#	#                                value
++#	#           group_by_node_name = 1 priority group per target node name
 +#	# default : failover
  #	#
  #	path_grouping_policy	multibus
  #
-@@ -49,17 +49,17 @@
+@@ -49,26 +57,37 @@
  #	#           path identifier. Absolute path required
  #	# default : /lib/udev/scsi_id -g -u -s
  #	#
@@ -11453,11 +11599,34 @@ index e6cfe9a..3653477 100644
  #	# default : (null)
  #	#
 -#	#prio_callout	"/bin/true"
-+#	#prio	"alua"
++#	prio	"alua"
  #
  #	#
- #	# name    : path_checker
-@@ -80,6 +80,16 @@
+-#	# name    : path_checker
++#	# name    : features
++#	# scope   : multipath
++#	# desc    : The default extra features of multipath devices. The
++#	#           only existing feature currently is queue_if_no_path, which
++#	#           is the same as setting no_path_retry to queue.
++#	# values  : "1 queue_if_no_path"
++#	# default : (null)
++#	#
++#	features	"1 queue_if_no_path"
++#
++#	#
++#	# name    : path_checker, checker
+ #	# scope   : multipath & multipathd
+ #	# desc    : the default method used to determine the paths' state
+-#	# values  : readsector0|tur|emc_clariion|hp_sw|directio
++#	# values  : readsector0|tur|emc_clariion|hp_sw|directio|rdac|cciss_tur
+ #	# default : directio
+ #	#
+-#	#path_checker	directio
++#	path_checker	directio
+ #
+ #	#
+ #	# name    : rr_min_io
+@@ -80,6 +99,16 @@
  #	rr_min_io	100
  #
  #	#
@@ -11474,9 +11643,14 @@ index e6cfe9a..3653477 100644
  #	# name    : rr_weight
  #	# scope   : multipath
  #	# desc    : if set to priorities the multipath configurator will assign
-@@ -96,9 +106,9 @@
- #	#	    0 means immediate failback, values >0 means deffered failback
- #	#	    expressed in seconds.
+@@ -93,12 +122,12 @@
+ #	# name    : failback
+ #	# scope   : multipathd
+ #	# desc    : tell the daemon to manage path group failback, or not to.
+-#	#	    0 means immediate failback, values >0 means deffered failback
+-#	#	    expressed in seconds.
++#	#	    0 means immediate failback, values >0 means deffered
++#	#           failback expressed in seconds.
  #	# values  : manual|immediate|n > 0
 -#	# default : immediate
 +#	# default : manual
@@ -11486,21 +11660,152 @@ index e6cfe9a..3653477 100644
  #
  #	#
  #	# name    : no_path_retry
-@@ -219,9 +229,9 @@
- #		#	    0 means immediate failback, values >0 means deffered failback
- #		#	    expressed in seconds.
- #		# values  : manual|immediate|n > 0
--#		# default : immediate
-+#		# default : manual
- #		#
--#		failback		manual
-+#		failback		immediate
+@@ -109,7 +138,7 @@
+ #	# values  : queue|fail|n (>0)
+ #	# default : (null)
+ #	#
+-#	#no_path_retry  queue
++#	no_path_retry  queue
+ #
+ #	#
+ #	# name    : user_friendly_names
+@@ -130,13 +159,16 @@
+ ## name    : blacklist
+ ## scope   : multipath & multipathd
+ ## desc    : list of device names to discard as not multipath candidates
+-## default : cciss, fd, hd, md, dm, sr, scd, st, ram, raw, loop
++##           Devices can be identified by their device node name "devnode",
++##           their WWID "wwid", or their vender and product strings
++##           "device"
++## default : fd, hd, md, dm, sr, scd, st, ram, raw, loop, dcssblk
+ ##
+ #blacklist {
+ #       wwid 26353900f02796769
+ #	devnode "^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
+-#	devnode "^hd[a-z][[0-9]*]"
+-#	devnode "^cciss!c[0-9]d[0-9]*[p[0-9]*]"
++#	devnode "^hd[a-z]"
++#	devnode "^dcssblk[0-9]*"
+ #       device {
+ #               vendor DEC.*
+ #               product MSA[15]00
+@@ -190,56 +222,60 @@
+ #		# scope   : multipath
+ #		# desc    : path grouping policy to apply to this multipath
+ #		# values  : failover, multibus, group_by_serial
+-#		# default : failover
+-#		#
+-#		path_grouping_policy	multibus
++#		# values  : failover           = 1 path per priority group
++#		#           multibus           = all valid paths in 1 priority
++#		#                                group
++#		#           group_by_serial    = 1 priority group per detected
++#		#                                serial number
++#		#           group_by_prio      = 1 priority group per path
++#		#                                priority value
++#		#           group_by_node_name = 1 priority group per target
++#		#                                node name
++#		#
++#		path_grouping_policy	failover
  #
  #		#
+-#		# name    : path_checker
+-#		# scope   : multipathd
+-#		# desc    : path checking alorithm to use to check path state
+-#		# values  : readsector0|tur|emc_clariion|hp_sw|directio
+-#		# default : directio
+-#		#
+-#		# path_checker		directio
+-#		
+-#		#
+ #		# name    : path_selector
+ #		# desc    : the path selector algorithm to use for this mpath
+ #		#           these algo are offered by the kernel mpath target
+ #		# values  : "round-robin 0"
+-#		# default : "round-robin 0"
+ #		#
+ #		path_selector		"round-robin 0"
+ #
+ #		#
+ #		# name    : failback
+ #		# scope   : multipathd
+-#		# desc    : tell the daemon to manage path group failback, or not to.
+-#		#	    0 means immediate failback, values >0 means deffered failback
+-#		#	    expressed in seconds.
++#		# desc    : tell the daemon to manage path group failback, or
++#		#	    not to. 0 means immediate failback, values >0 means
++#		#	    deffered failback expressed in seconds.
+ #		# values  : manual|immediate|n > 0
+-#		# default : immediate
+ #		#
+ #		failback		manual
+ #
+ #		#
++#		# name    : rr_weight
++#		# scope   : multipath
++#		# desc    : if set to priorities the multipath configurator will
++#		#	    assign path weights as "path prio * rr_min_io"
++#		# values  : priorities|uniform
++#		#
++#		rr_weight	priorities
++#
++#		#
  #		# name    : no_path_retry
-@@ -293,18 +303,17 @@
+ #		# scope   : multipath & multipathd
+-#		# desc    : tell the number of retries until disable queueing, or
+-#		#           "fail" means immediate failure (no queueing),
++#		# desc    : tell the number of retries until disable queueing,
++#		#           or "fail" means immediate failure (no queueing),
+ #		#           "queue" means never stop queueing
+ #		# values  : queue|fail|n (>0)
+-#		# default : (null)
+ #		#
+-#		#no_path_retry  queue
++#		no_path_retry  queue
+ #
+ #		#
+ #		# name    : rr_min_io
+ #		# scope   : multipath
+ #		# desc    : the number of IO to route to a path before switching
+ #		#           to the next in the same path group
+-#		# default : 1000
+ #		#
+ #		rr_min_io	100
+ #	}
+@@ -275,43 +311,44 @@
+ #		#
+ #		# name    : path_grouping_policy
+ #		# scope   : multipath
+-#		# desc    : path grouping policy to apply to multipath hosted
+-#		#           by this storage controller
+-#		# values  : failover        = 1 path per priority group
+-#		#           multibus        = all valid paths in 1 priority
+-#		#                             group
+-#		#           group_by_serial = 1 priority group per detected
+-#		#                             serial number
+-#		# default : failover
+-#		#
+-#		path_grouping_policy	multibus
++#		# desc    : path grouping policy to apply to this multipath
++#		# values  : failover, multibus, group_by_serial
++#		# values  : failover           = 1 path per priority group
++#		#           multibus           = all valid paths in 1 priority
++#		#                                group
++#		#           group_by_serial    = 1 priority group per detected
++#		#                                serial number
++#		#           group_by_prio      = 1 priority group per path
++#		#                                priority value
++#		#           group_by_node_name = 1 priority group per target
++#		#                                node name
++#		#
++#		path_grouping_policy	failover
+ #
+ #		#
+ #		# name    : getuid_callout
+ #		# scope   : multipath
+ #		# desc    : the program and args to callout to obtain a unique 
  #		#           path identifier. Absolute path required
- #		# default : /lib/udev/scsi_id -g -u -s
+-#		# default : /lib/udev/scsi_id -g -u -s
  #		#
 -#		getuid_callout          "/lib/udev/scsi_id -g -u -s /block/%n"
 +#		getuid_callout          "/lib/udev/scsi_id -g -u -d /dev/%n"
@@ -11520,18 +11825,678 @@ index e6cfe9a..3653477 100644
 +#		prio          "hp_sw"
  #
  #		#
- #		# name    : path_checker
-@@ -331,7 +340,7 @@
- #		#	    0 means immediate failback, values >0 means deffered failback
- #		#	    expressed in seconds.
+-#		# name    : path_checker
++#		# name    : path_checker, checker
+ #		# scope   : multipathd
+ #		# desc    : path checking alorithm to use to check path state
+-#		# values  : readsector0|tur|emc_clariion|hp_sw|directio
+-#		# default : directio
++#		# values  : readsector0|tur|emc_clariion|hp_sw|directio|rdac|
++#		#           cciss_tur
+ #		#
+ #		path_checker		directio
+ #
+@@ -320,27 +357,64 @@
+ #		# desc    : the path selector algorithm to use for this mpath
+ #		#           these algo are offered by the kernel mpath target
+ #		# values  : "round-robin 0"
+-#		# default : "round-robin 0"
+ #		#
+ #		path_selector		"round-robin 0"
+ #
+ #		#
++#		# name    : features
++#		# scope   : multipath
++#		# desc    : The extra features of multipath devices. The only
++#		#           existing feature currently is queue_if_no_path,
++#		#           which is the same as setting no_path_retry to queue.
++#		# values  : "1 queue_if_no_path"
++#		#
++#		features	"1 queue_if_no_path"
++#
++#		#
++#		# name    : hardware_handler
++#		# scope   : multipath
++#		# desc    : If set, it specifies a module that will be used to
++#		#           perform hardware specific actions when switching
++#		#	    path groups or handling IO errors
++#		# values  : "0"|"1 emc"
++#		# default : "0"
++#		#
++#		hardware_handler "1 emc"
++#
++#		#
+ #		# name    : failback
+ #		# scope   : multipathd
+-#		# desc    : tell the daemon to manage path group failback, or not to.
+-#		#	    0 means immediate failback, values >0 means deffered failback
+-#		#	    expressed in seconds.
++#		# desc    : tell the daemon to manage path group failback, or
++#		#	    not to. 0 means immediate failback, values >0 means
++#		#	    deffered failback expressed in seconds.
  #		# values  : manual|immediate|n > 0
 -#		# default : immediate
-+#		# default : manual
  #		#
  #		failback		30
  #
+ #		#
++#		# name    : rr_weight
++#		# scope   : multipath
++#		# desc    : if set to priorities the multipath configurator will
++#		#           assign path weights as "path prio * rr_min_io"
++#		# values  : priorities|uniform
++#		#
++#		rr_weight	priorities
++#
++#		#
++#		# name    : no_path_retry
++#		# scope   : multipath & multipathd
++#		# desc    : tell the number of retries until disable queueing,
++#		#           or "fail" means immediate failure (no queueing),
++#		#           "queue" means never stop queueing
++#		# values  : queue|fail|n (>0)
++#		#
++#		no_path_retry  queue
++#
++#		#
+ #		# name    : rr_min_io
+ #		# scope   : multipath
+ #		# desc    : the number of IO to route to a path before switching
+ #		#           to the next in the same path group
+-#		# default : 1000
+ #		#
+ #		rr_min_io	100
+ #
+@@ -348,7 +422,6 @@
+ #		# name    : product_blacklist
+ #		# scope   : multipath & multipathd
+ #		# desc    : product strings to blacklist for this vendor
+-#		# default : none
+ #		#
+ #		product_blacklist	LUN_Z
+ #	}
+diff --git a/multipath.conf.defaults b/multipath.conf.defaults
+new file mode 100644
+index 0000000..d2dfe2b
+--- /dev/null
++++ b/multipath.conf.defaults
+@@ -0,0 +1,574 @@
++# These are the compiled in default settings.  They will be used unless you
++# overwrite these values in your config file.
++
++#defaults {
++#	udev_dir		/dev
++#	polling_interval	5
++#	selector		"round-robin 0"
++#	path_grouping_policy	failover
++#	getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#	prio			const
++#	path_checker		directio
++#	rr_min_io		1000
++#	rr_weight		uniform
++#	failback		manual
++#	no_path_retry		fail
++#	user_friendly_names	no
++#}
++#
++#blacklist {
++#	devnode	"^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
++#	devnode	"^hd[a-z]"
++#	devnode	"^dcssblk[0-9]*"
++#}
++#
++#devices {
++#	device {
++#		vendor			"APPLE*"
++#		product			"Xserve RAID"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"3PARdata"
++#		product			"VV"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"DEC"
++#		product			"HSG80"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"1 hp-sw"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		hp_sw
++#		prio			hp_sw
++#	}
++#	device {
++#		vendor			"HP"
++#		product			"A6189A"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"(COMPAQ|HP)"
++#		product			"(MSA|HSV)1.0.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"1 hp-sw"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		hp_sw
++#		prio			hp_sw
++#	}
++#	device {
++#		vendor			"HP"
++#		product			"MSA VOLUME"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			alua
++#	}
++#	device {
++#		vendor			"HP"
++#		product			"MSA2000s*"
++#		getuid_callout		"/sbin/cciss_id %n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"(COMPAQ|HP)"
++#		product			"HSV1[01]1|HSV2[01]0|HSV300"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			alua
++#	}
++#	device {
++#		vendor			"HP"
++#		product			"MSA2[02]12*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"HP"
++#		product			"LOGICAL VOLUME.*"
++#		getuid_callout		"/lib/udev/scsi_id -n -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		12
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"DDN"
++#		product			"SAN DataDirector"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"EMC"
++#		product			"SYMMETRIX"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -ppre-spc3-83 -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"DGC"
++#		product			".*"
++#		product_blacklist	"LUNZ"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		prio_callout		"/sbin/mpath_prio_emc /dev/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"1 emc"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		60
++#		rr_min_io		1000
++#		path_checker		emc_clariion
++#		prio			emc
++#	}
++#	device {
++#		vendor			"FSC"
++#		product			"CentricStor"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_serial
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"(HITACHI|HP)"
++#		product			"OPEN-.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		100
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"HITACHI"
++#		product			"DF.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			hds
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"ProFibre 4000R"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		readsector0
++#		prio			const
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"1722-600"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		300
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"1742"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"1814"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"1815"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"3526"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"3542"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_serial
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"2105(800|F20)"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_serial
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"1750500"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			alua
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"2107900"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"2145"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			alua
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"S/390 DASD ECKD"
++#		product_blacklist	"S/390.*"
++#		getuid_callout		"/sbin/dasdinfo -u -b %n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"NETAPP"
++#		product			"LUN.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		128
++#		path_checker		directio
++#		prio			netapp
++#	}
++#	device {
++#		vendor			"IBM"
++#		product			"Nseries.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		128
++#		path_checker		directio
++#		prio			netapp
++#	}
++#	device {
++#		vendor			"Pillar"
++#		product			"Axiom.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			alua
++#	}
++#	device {
++#		vendor			"SGI"
++#		product			"TP9[13]00"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"SGI"
++#		product			"TP9[45]00"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"SGI"
++#		product			"IS.*"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"STK"
++#		product			"OPENstorage D280"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"SUN"
++#		product			"(StorEdge 3510|T4)"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		directio
++#		prio			const
++#	}
++#	device {
++#		vendor			"PIVOT3"
++#		product			"RAIGE VOLUME"
++#		getuid_callout		"/sbin/scsi_id -p 0x80 -g -u -s /block/%n"
++#		features		"1 queue_if_no_path"
++#		hardware_handler	"0"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	multibus
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker		tur
++#		prio			const
++#	}
++#	device {
++#		vendor			"SUN"
++#		product			"CSM200_R"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#	device {
++#		vendor			"SUN"
++#		product			"LCSM100_F"
++#		getuid_callout		"/lib/udev/scsi_id -g -u -s /block/%n"
++#		features		"0"
++#		hardware_handler	"1 rdac"
++#		path_selector		"round-robin 0"
++#		path_grouping_policy	group_by_prio
++#		failback		immediate
++#		rr_weight		uniform
++#		no_path_retry		queue
++#		rr_min_io		1000
++#		path_checker		rdac
++#		prio			rdac
++#	}
++#}
 diff --git a/multipath.conf.synthetic b/multipath.conf.synthetic
-index 633d625..6459f56 100644
+index 633d625..a762016 100644
 --- a/multipath.conf.synthetic
 +++ b/multipath.conf.synthetic
 @@ -7,10 +7,11 @@
@@ -11548,7 +12513,23 @@ index 633d625..6459f56 100644
  #	rr_weight		priorities
  #	failback		immediate
  #	no_path_retry		fail
-@@ -52,7 +53,7 @@
+@@ -20,7 +21,6 @@
+ #       wwid 26353900f02796769
+ #	devnode "^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
+ #	devnode "^hd[a-z][[0-9]*]"
+-#	devnode "^cciss!c[0-9]d[0-9]*[p[0-9]*]"
+ #	device {
+ #		vendor DEC.*
+ #		product MSA[15]00
+@@ -35,7 +35,6 @@
+ #		wwid			3600508b4000156d700012000000b0000
+ #		alias			yellow
+ #		path_grouping_policy	multibus
+-#		path_checker		directio
+ #		path_selector		"round-robin 0"
+ #		failback		manual
+ #		rr_weight		priorities
+@@ -52,7 +51,7 @@
  #		vendor			"COMPAQ  "
  #		product			"HSV110 (C)COMPAQ"
  #		path_grouping_policy	multibus
@@ -11557,6 +12538,15 @@ index 633d625..6459f56 100644
  #		path_checker		directio
  #		path_selector		"round-robin 0"
  #		hardware_handler	"0"
+@@ -60,7 +59,7 @@
+ #		rr_weight		priorities
+ #		no_path_retry		queue
+ #		rr_min_io		100
+-#		product_blacklist	LUN_Z
++#		product_blacklist	LUNZ
+ #	}
+ #	device {
+ #		vendor			"COMPAQ  "
 diff --git a/multipath/02_multipath b/multipath/02_multipath
 index 067c582..467a7cb 100755
 --- a/multipath/02_multipath
@@ -11841,7 +12831,7 @@ index 815c307..8b38a6e 100644
  	dbg_free_final(NULL);
  #endif
 diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
-index c8ab6b0..39639dd 100644
+index c8ab6b0..c02245c 100644
 --- a/multipath/multipath.conf.5
 +++ b/multipath/multipath.conf.5
 @@ -109,7 +109,7 @@ Default value is \fImultibus\fR.
@@ -11853,7 +12843,16 @@ index c8ab6b0..39639dd 100644
  .TP
  .B prio_callout
  The default program and args to callout to obtain a path priority
-@@ -374,6 +374,15 @@ section:
+@@ -303,8 +303,6 @@ section:
+ .TP 18
+ .B path_grouping_policy
+ .TP
+-.B path_checker
+-.TP
+ .B path_selector
+ .TP
+ .B failback
+@@ -374,6 +372,15 @@ section:
  .RE
  .PD
  .LP
@@ -12316,7 +13315,7 @@ index 863694b..f57a160 100644
  int cli_fail(void * v, char ** reply, int * len, void * data);
 +int cli_quit(void * v, char ** reply, int * len, void * data);
 diff --git a/multipathd/main.c b/multipathd/main.c
-index da5fd8f..7304056 100644
+index da5fd8f..36aa93c 100644
 --- a/multipathd/main.c
 +++ b/multipathd/main.c
 @@ -12,6 +12,8 @@
@@ -12401,16 +13400,25 @@ index da5fd8f..7304056 100644
  
  	return 0;
  }
-@@ -232,7 +241,7 @@ ev_add_map (struct sysfs_device * dev, struct vectors * vecs)
+@@ -232,8 +241,9 @@ ev_add_map (struct sysfs_device * dev, struct vectors * vecs)
  
  	map_present = dm_map_present(alias);
  
 -	if (map_present && dm_type(alias, DEFAULT_TARGET) <= 0) {
 +	if (map_present && dm_type(alias, TGT_MPATH) <= 0) {
  		condlog(4, "%s: not a multipath map", alias);
++		FREE(alias);
  		return 0;
  	}
-@@ -253,21 +262,20 @@ ev_add_map (struct sysfs_device * dev, struct vectors * vecs)
+ 
+@@ -247,31 +257,32 @@ ev_add_map (struct sysfs_device * dev, struct vectors * vecs)
+ 		 */
+ 		condlog(0, "%s: devmap already registered",
+ 			dev->kernel);
++		FREE(alias);
+ 		return 0;
+ 	}
+ 
  	/*
  	 * now we can register the map
  	 */
@@ -12436,7 +13444,12 @@ index da5fd8f..7304056 100644
  	else
  		condlog(0, "%s: uev_add_map %s failed", alias, dev->kernel);
  
-@@ -290,7 +298,7 @@ ev_remove_map (char * devname, struct vectors * vecs)
+ 	FREE(refwwid);
++	FREE(alias);
+ 	return r;
+ }
+ 
+@@ -290,7 +301,7 @@ ev_remove_map (char * devname, struct vectors * vecs)
  	mpp = find_mp_by_str(vecs->mpvec, devname);
  
  	if (!mpp) {
@@ -12445,7 +13458,7 @@ index da5fd8f..7304056 100644
  			devname);
  		return 0;
  	}
-@@ -368,7 +376,7 @@ ev_add_path (char * devname, struct vectors * vecs)
+@@ -368,7 +379,7 @@ ev_add_path (char * devname, struct vectors * vecs)
  		condlog(0, "%s: failed to get path uid", devname);
  		return 1; /* leave path added to pathvec */
  	}
@@ -12454,7 +13467,7 @@ index da5fd8f..7304056 100644
  		int i = find_slot(vecs->pathvec, (void *)pp);
  		if (i != -1)
  			vector_del_slot(vecs->pathvec, i);
-@@ -431,11 +439,11 @@ rescan:
+@@ -431,11 +442,11 @@ rescan:
  	    start_waiter_thread(mpp, vecs))
  			goto out;
  
@@ -12468,7 +13481,7 @@ index da5fd8f..7304056 100644
  	return 1;
  }
  
-@@ -457,8 +465,7 @@ ev_remove_path (char * devname, struct vectors * vecs)
+@@ -457,8 +468,7 @@ ev_remove_path (char * devname, struct vectors * vecs)
  {
  	struct multipath * mpp;
  	struct path * pp;
@@ -12478,7 +13491,7 @@ index da5fd8f..7304056 100644
  
  	pp = find_path_by_dev(vecs->pathvec, devname);
  
-@@ -468,100 +475,81 @@ ev_remove_path (char * devname, struct vectors * vecs)
+@@ -468,100 +478,81 @@ ev_remove_path (char * devname, struct vectors * vecs)
  	}
  
  	/*
@@ -12634,7 +13647,7 @@ index da5fd8f..7304056 100644
  	return 1;
  }
  
-@@ -571,7 +559,7 @@ map_discovery (struct vectors * vecs)
+@@ -571,7 +562,7 @@ map_discovery (struct vectors * vecs)
  	struct multipath * mpp;
  	unsigned int i;
  
@@ -12643,7 +13656,29 @@ index da5fd8f..7304056 100644
  		return 1;
  
  	vector_foreach_slot (vecs->mpvec, mpp, i)
-@@ -704,15 +692,19 @@ uxlsnrloop (void * ap)
+@@ -615,13 +606,19 @@ uxsock_trigger (char * str, char ** reply, int * len, void * trigger_data)
+ static int
+ uev_discard(char * devpath)
+ {
++	char *tmp;
+ 	char a[10], b[10];
+ 
+ 	/*
+ 	 * keep only block devices, discard partitions
+ 	 */
+-	if (sscanf(devpath, "/block/%10s", a) != 1 ||
+-	    sscanf(devpath, "/block/%10[^/]/%10s", a, b) == 2) {
++	tmp = strstr(devpath, "/block/");
++	if (tmp == NULL){
++		condlog(4, "no /block/ in '%s'", devpath);
++		return 1;
++	}
++	if (sscanf(tmp, "/block/%10s", a) != 1 ||
++	    sscanf(tmp, "/block/%10[^/]/%10s", a, b) == 2) {
+ 		condlog(4, "discard event on %s", devpath);
+ 		return 1;
+ 	}
+@@ -704,15 +701,19 @@ uxlsnrloop (void * ap)
  		return NULL;
  
  	set_handler_callback(LIST+PATHS, cli_list_paths);
@@ -12663,7 +13698,7 @@ index da5fd8f..7304056 100644
  	set_handler_callback(ADD+PATH, cli_add_path);
  	set_handler_callback(DEL+PATH, cli_del_path);
  	set_handler_callback(ADD+MAP, cli_add_map);
-@@ -723,6 +715,7 @@ uxlsnrloop (void * ap)
+@@ -723,6 +724,7 @@ uxlsnrloop (void * ap)
  	set_handler_callback(RESUME+MAP, cli_resume);
  	set_handler_callback(REINSTATE+PATH, cli_reinstate);
  	set_handler_callback(FAIL+PATH, cli_fail);
@@ -12671,7 +13706,7 @@ index da5fd8f..7304056 100644
  
  	uxsock_listen(&uxsock_trigger, ap);
  
-@@ -809,7 +802,7 @@ mpvec_garbage_collector (struct vectors * vecs)
+@@ -809,7 +811,7 @@ mpvec_garbage_collector (struct vectors * vecs)
  	vector_foreach_slot (vecs->mpvec, mpp, i) {
  		if (mpp && mpp->alias && !dm_map_present(mpp->alias)) {
  			condlog(2, "%s: remove dead map", mpp->alias);
@@ -12680,7 +13715,7 @@ index da5fd8f..7304056 100644
  			i--;
  		}
  	}
-@@ -852,171 +845,185 @@ retry_count_tick(vector mpvec)
+@@ -852,171 +854,185 @@ retry_count_tick(vector mpvec)
  	}
  }
  
@@ -12716,11 +13751,11 @@ index da5fd8f..7304056 100644
 +	if (!checker_selected(&pp->checker)) {
 +		pathinfo(pp, conf->hwtable, DI_SYSFS);
 +		select_checker(pp);
- 	}
++	}
 +	if (!checker_selected(&pp->checker)) {
 +		condlog(0, "%s: checker is not set", pp->dev);
 +		return;
-+	}
+ 	}
 +	/*
 +	 * Set checker in async mode.
 +	 * Honored only by checker implementing the said mode.
@@ -13005,7 +14040,7 @@ index da5fd8f..7304056 100644
  		if (count)
  			count--;
  		else {
-@@ -1054,7 +1061,7 @@ configure (struct vectors * vecs, int start_waiters)
+@@ -1054,7 +1070,7 @@ configure (struct vectors * vecs, int start_waiters)
  	path_discovery(vecs->pathvec, conf, DI_ALL);
  
  	vector_foreach_slot (vecs->pathvec, pp, i){
@@ -13014,7 +14049,7 @@ index da5fd8f..7304056 100644
  			vector_del_slot(vecs->pathvec, i);
  			free_path(pp);
  			i--;
-@@ -1068,7 +1075,7 @@ configure (struct vectors * vecs, int start_waiters)
+@@ -1068,7 +1084,7 @@ configure (struct vectors * vecs, int start_waiters)
  	/*
  	 * create new set of maps & push changed ones into dm
  	 */
@@ -13023,7 +14058,7 @@ index da5fd8f..7304056 100644
  		return 1;
  
  	/*
-@@ -1085,7 +1092,7 @@ configure (struct vectors * vecs, int start_waiters)
+@@ -1085,7 +1101,7 @@ configure (struct vectors * vecs, int start_waiters)
  	/*
  	 * purge dm of old maps
  	 */
@@ -13032,7 +14067,7 @@ index da5fd8f..7304056 100644
  
  	/*
  	 * save new set of maps formed by considering current path state
-@@ -1115,7 +1122,7 @@ reconfigure (struct vectors * vecs)
+@@ -1115,7 +1131,7 @@ reconfigure (struct vectors * vecs)
  	 * free old map and path vectors ... they use old conf state
  	 */
  	if (VECTOR_SIZE(vecs->mpvec))
@@ -13041,7 +14076,7 @@ index da5fd8f..7304056 100644
  
  	if (VECTOR_SIZE(vecs->pathvec))
  		free_pathvec(vecs->pathvec, FREE_PATHS);
-@@ -1265,6 +1272,15 @@ child (void * param)
+@@ -1265,6 +1281,15 @@ child (void * param)
  	if (load_config(DEFAULT_CONFIGFILE))
  		exit(1);
  
@@ -13057,7 +14092,7 @@ index da5fd8f..7304056 100644
  	setlogmask(LOG_UPTO(conf->verbosity + 3));
  
  	/*
-@@ -1275,6 +1291,21 @@ child (void * param)
+@@ -1275,6 +1300,21 @@ child (void * param)
  		conf->max_checkint = MAX_CHECKINT(conf->checkint);
  	}
  
@@ -13079,7 +14114,7 @@ index da5fd8f..7304056 100644
  	if (pidfile_create(DEFAULT_PIDFILE, getpid())) {
  		if (logsink)
  			log_thread_stop();
-@@ -1319,7 +1350,7 @@ child (void * param)
+@@ -1319,7 +1359,7 @@ child (void * param)
  	 * exit path
  	 */
  	lock(vecs->lock);
@@ -13088,7 +14123,7 @@ index da5fd8f..7304056 100644
  	free_pathvec(vecs->pathvec, FREE_PATHS);
  
  	pthread_cancel(check_thr);
-@@ -1340,8 +1371,6 @@ child (void * param)
+@@ -1340,8 +1380,6 @@ child (void * param)
  	vecs->lock = NULL;
  	FREE(vecs);
  	vecs = NULL;
@@ -13097,7 +14132,7 @@ index da5fd8f..7304056 100644
  
  	condlog(2, "--------shut down-------");
  
-@@ -1351,6 +1380,14 @@ child (void * param)
+@@ -1351,6 +1389,14 @@ child (void * param)
  	dm_lib_release();
  	dm_lib_exit();
  
@@ -13112,7 +14147,7 @@ index da5fd8f..7304056 100644
  #ifdef _DEBUG_
  	dbg_free_final(NULL);
  #endif
-@@ -1450,6 +1487,22 @@ main (int argc, char *argv[])
+@@ -1450,6 +1496,22 @@ main (int argc, char *argv[])
  			;
  		}
  	}
