@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	6
+Release:	7
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -67,7 +67,11 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
+%if "%{pld_release}" == "ti"
+Requires:	udev-core >= 1:124-3
+%else
 Requires:	udev-core >= 1:127
+%endif
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
