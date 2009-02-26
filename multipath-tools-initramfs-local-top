@@ -1,0 +1,33 @@
+#!/bin/sh
+
+VERBOSITY=0
+
+PREREQ="udev"
+
+prereqs() { echo "$PREREQ"; }
+
+case $1 in
+prereqs)
+	prereqs
+	exit 0
+	;;
+esac
+
+
+if [ ! -e /sbin/multipath ]; then
+	exit 0
+fi
+
+/sbin/modprobe -q dm-multipath
+/sbin/modprobe -q scsi_dh
+/sbin/modprobe -q scsi_dh_rdac
+/sbin/modprobe -q scsi_dh_hp_sw
+/sbin/modprobe -q scsi_dh_emc
+/sbin/modprobe -q scsi_dh_alua
+
+echo "Discovering multipaths..."
+
+/sbin/multipath -v $VERBOSITY
+
+exit 0
+
