@@ -14,6 +14,8 @@ Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.ta
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
 Source3:	%{name}-bindings
+Source4:	%{name}-initramfs-hooks
+Source5:	%{name}-initramfs-local-top
 URL:		http://christophe.varoqui.free.fr/
 Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
