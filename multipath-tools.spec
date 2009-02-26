@@ -83,6 +83,21 @@ multipath maps partionable.
 kpartx odwzorowuje liniowe mapy urządzeń na partycje urządzeń, co
 umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
+%package initramfs
+Summary:	Tools to manage multipathed devices with the device-mapper - support scripts for initramfs-tools
+Summary(pl.UTF-8):	Wielotrasowy dostęp do zasobów przy użyciu device-mappera - skrypty dla initramfs-tools
+Group:		Base
+Requires:	%{name} = %{version}-%{release}
+Requires:	initramfs-tools
+
+%description initramfs
+Tools to manage multipathed devices with the device-mapper - support
+scripts for initramfs-tools.
+
+%description initramfs -l pl.UTF-8
+Wielotrasowy dostęp do zasobów przy użyciu device-mappera - skrypty
+dla initramfs-tools.
+
 %prep
 %setup -q
 %patch100 -p1
@@ -109,6 +124,7 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
 %install
 rm -rf $RPM_BUILD_ROOT
+install -d $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/{hooks,scripts/local-top}
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
@@ -119,6 +135,9 @@ install -D %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
 install -D %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
 rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
+
+install %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
+install %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -157,3 +176,8 @@ fi
 %attr(755,root,root) /lib/udev/kpartx_id
 %{_sysconfdir}/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
+
+%files initramfs
+%defattr(644,root,root,755)
+%attr(755,root,root) %{_datadir}/initramfs-tools/hooks/multipath
+%attr(755,root,root) %{_datadir}/initramfs-tools/scripts/local-top/multipath
