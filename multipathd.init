@@ -16,26 +16,38 @@
 start() {
 	# Check if the service is already running?
 	if [ ! -f /var/lock/subsys/multipathd ]; then
-		msg_starting multipathd
+		msg_starting "multipath daemon"
 		modprobe dm-multipath
-		daemon multipathd
+		daemon /sbin/multipathd
 		RETVAL=$?
 		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/multipathd
 	else
-		msg_already_running multipathd
+		msg_already_running "multipath daemon"
 	fi
 }
 
 stop() {
 	if [ -f /var/lock/subsys/multipathd ]; then
 		# Stop daemons.
-		msg_stopping multipathd
+		msg_stopping "multipath daemon"
 		killproc --pidfile multipathd.pid multipathd -TERM
 		rm -f /var/lock/subsys/multipathd
 	else
-		msg_not_running multipathd
+		msg_not_running "multipath daemon"
 	fi
 }
+
+condrestart() {
+	if [ ! -f /var/lock/subsys/multipathd ]; then
+		msg_not_running "multipath daemon"
+		RETVAL=$1
+		return
+	fi
+
+	stop
+	start
+}
+
 
 RETVAL=0
 # See how we were called.
@@ -43,22 +55,25 @@ case "$1" in
   start)
   	start
 	;;
-
   stop)
 	stop
 	;;
-
-  restart|force-reload)
+  restart)
 	stop
 	start
 	;;
-
+  try-restart)
+	condrestart 0
+	;;
+  force-reload)
+	condrestart 7
+	;;
   status)
 	status multipathd
 	RETVAL=$?
 	;;
   *)
-	msg_usage "$0 {start|stop|status|restart|force-reload}"
+	msg_usage "$0 {start|stop|status|restart|try-restart|force-reload}"
 	exit 3
 	;;
 esac
