@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.8
-Release:	9
+Release:	11
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -21,10 +21,7 @@ Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		%{name}-bindings.patch
-# http://securitytracker.com/alerts/2009/Apr/1021997.html
-# Fix in RH:
-# https://rhn.redhat.com/errata/RHSA-2009-0411.html
-BuildRequires:	security(CVE-2009-0115)
+Patch3:		493400_multipathd_umask_fix.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -108,6 +105,7 @@ dla initramfs-tools.
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
+%patch3 -p1
 
 %build
 %if %{with initrd}
