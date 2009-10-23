@@ -11,30 +11,33 @@
 # Source function library
 . /etc/rc.d/init.d/functions
 
+# Get service config - may override defaults
 [ -f /etc/sysconfig/multipathd ] && . /etc/sysconfig/multipathd
 
 start() {
 	# Check if the service is already running?
-	if [ ! -f /var/lock/subsys/multipathd ]; then
-		msg_starting "multipath daemon"
-		modprobe dm-multipath
-		daemon /sbin/multipathd
-		RETVAL=$?
-		[ $RETVAL -eq 0 ] && touch /var/lock/subsys/multipathd
-	else
+	if [ -f /var/lock/subsys/multipathd ]; then
 		msg_already_running "multipath daemon"
+		return
 	fi
+
+	msg_starting "multipath daemon"
+	modprobe dm-multipath
+	daemon /sbin/multipathd
+	RETVAL=$?
+	[ $RETVAL -eq 0 ] && touch /var/lock/subsys/multipathd
 }
 
 stop() {
-	if [ -f /var/lock/subsys/multipathd ]; then
-		# Stop daemons.
-		msg_stopping "multipath daemon"
-		killproc --pidfile multipathd.pid multipathd -TERM
-		rm -f /var/lock/subsys/multipathd
-	else
+	if [ ! -f /var/lock/subsys/multipathd ]; then
 		msg_not_running "multipath daemon"
+		return
 	fi
+
+	# Stop daemons.
+	msg_stopping "multipath daemon"
+	killproc --pidfile multipathd.pid multipathd -TERM
+	rm -f /var/lock/subsys/multipathd
 }
 
 condrestart() {
