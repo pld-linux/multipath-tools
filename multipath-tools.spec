@@ -38,10 +38,14 @@ Requires:	device-mapper >= 1.02.08
 Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
+%if "%{pld_release}" == "th"
+Conflicts:	udev < 1:127
+%endif
 %if "%{pld_release}" == "ti"
 Conflicts:	udev < 1:124-3
-%else
-Conflicts:	udev < 1:127
+%endif
+%if "%{pld_release}" == "ac"
+Conflicts:	udev < 1:079-10
 %endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
