@@ -2,11 +2,13 @@
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
 #
+%define		snap	20091020
+%define		rel		0.1
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.4.8
-Release:	13
+Version:	0.4.9
+Release:	0.%{snap}.%{rel}
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -21,8 +23,7 @@ Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		%{name}-bindings.patch
-Patch3:		493400_multipathd_umask_fix.patch
-Patch4:		config.patch
+Patch3:		config.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -111,7 +112,6 @@ dla initramfs-tools.
 %patch1 -p1
 %patch2 -p1
 %patch3 -p1
-%patch4 -p1
 
 %build
 %if %{with initrd}
@@ -127,22 +127,20 @@ dla initramfs-tools.
 %endif
 
 %{__make} -j1 \
-	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes" \
+	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
 	CC="%{__cc}"
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/{hooks,scripts/local-top}
+install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath,%{_datadir}/initramfs-tools/{hooks,scripts/local-top}}
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
 
-install -D multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
-install -D %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
-install -D %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
-install -D %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
-mv $RPM_BUILD_ROOT%{_sysconfdir}/udev/rules.d/{,40-}multipath.rules
-rm -f $RPM_BUILD_ROOT%{_sysconfdir}/dev.d/block/multipath.dev
+install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
+cp -a multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
+cp -a %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
+cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
 install %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
 install %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
@@ -166,14 +164,15 @@ fi
 %attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
-%dir /lib/multipath
-%attr(755,root,root) /lib/multipath/lib*.so
+%dir /%{_lib}/multipath
+%attr(755,root,root) /%{_lib}/multipath/lib*.so
+%attr(755,root,root) /%{_lib}/libmultipath.so
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
 %dir %{_sysconfdir}/multipath
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
-%{_sysconfdir}/udev/rules.d/40-multipath.rules
+/etc/udev/rules.d/multipath.rules
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/multipath.8*
 %{_mandir}/man8/multipathd.8*
@@ -182,7 +181,7 @@ fi
 %defattr(644,root,root,755)
 %doc kpartx/README
 %attr(755,root,root) /lib/udev/kpartx_id
-%{_sysconfdir}/udev/rules.d/kpartx.rules
+/etc/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
 
 %files initramfs
