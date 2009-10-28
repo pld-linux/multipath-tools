@@ -13,6 +13,7 @@ License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
 # Source0-md5:	3563b863b408d07c46929b6e8c2c248c
+Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
 Source3:	%{name}-bindings
