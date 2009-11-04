@@ -162,7 +162,6 @@ fi
 %files
 %defattr(644,root,root,755)
 %doc AUTHOR ChangeLog FAQ README TODO
-%attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
@@ -181,6 +180,7 @@ fi
 %files -n kpartx
 %defattr(644,root,root,755)
 %doc kpartx/README
+%attr(755,root,root) %{_sbindir}/kpartx
 %attr(755,root,root) /lib/udev/kpartx_id
 /etc/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
