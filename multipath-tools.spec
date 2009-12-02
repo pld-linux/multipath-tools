@@ -3,7 +3,7 @@
 %bcond_with	initrd		# build initrd version (very broken)
 #
 %define		snap	20091020
-%define		rel		0.1
+%define		rel		1
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
