@@ -3,7 +3,7 @@
 %bcond_with	initrd		# build initrd version (very broken)
 #
 %define		snap	20091020
-%define		rel		1
+%define		rel		2
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
@@ -77,10 +77,14 @@ device-mappera. Narzędzia to:
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
+%if "%{pld_release}" == "th"
+Conflicts:	udev-core < 1:127
+%endif
 %if "%{pld_release}" == "ti"
 Conflicts:	udev-core < 1:124-3
-%else
-Conflicts:	udev-core < 1:127
+%endif
+%if "%{pld_release}" == "ac"
+Conflicts:	udev-core < 1:079-10
 %endif
 
 %description -n kpartx
@@ -139,12 +143,12 @@ install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath
 	DESTDIR=$RPM_BUILD_ROOT
 
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
-cp -a multipath.conf.annotated $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
+cp -a multipath.conf.defaults $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
 cp -a %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
 cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
-install %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
-install %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
+install -p %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
+install -p %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -162,6 +166,7 @@ fi
 %files
 %defattr(644,root,root,755)
 %doc AUTHOR ChangeLog FAQ README TODO
+%doc multipath.conf.{annotated,defaults,synthetic}
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
