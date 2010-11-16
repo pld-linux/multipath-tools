@@ -2,17 +2,15 @@
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
 #
-%define		snap	20091020
-%define		rel		2
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.4.8
-Release:	14.%{snap}.%{rel}
+Version:	0.4.9
+Release:	1
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
-# Source0-md5:	3563b863b408d07c46929b6e8c2c248c
+# Source0-md5:	a6d4b48afc28f1f50f5ee4b1b06d2765
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -20,11 +18,9 @@ Source3:	%{name}-bindings
 Source4:	%{name}-initramfs-hooks
 Source5:	%{name}-initramfs-local-top
 URL:		http://christophe.varoqui.free.fr/
-Patch100:	%{name}-branch.diff
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
-Patch2:		%{name}-bindings.patch
-Patch3:		config.patch
+Patch2:		config.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -51,6 +47,7 @@ Conflicts:	udev < 1:079-10
 %endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
+%define		skip_post_check_so	libmultipath.so.0
 %define		_sbindir	/sbin
 
 %description
@@ -111,19 +108,17 @@ Wielotrasowy dostęp do zasobów przy użyciu device-mappera - skrypty
 dla initramfs-tools.
 
 %prep
-%setup -q
-%patch100 -p1
+%setup -qc
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
-%patch3 -p1
 
 %build
 %if %{with initrd}
 %{__make} -j1 \
 	BUILD=klibc \
 	CC="klcc -static" \
-	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes" \
+	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes" \
 	BUILDDIRS='multipath pathx' \
 	klibcdir=%{_libdir}/klibc \
 	libdm='$(klibcdir)/libdevmapper.a'
@@ -132,7 +127,7 @@ dla initramfs-tools.
 %endif
 
 %{__make} -j1 \
-	OPTFLAGS="%{rpmcflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
+	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
 	CC="%{__cc}"
 
 %install
@@ -149,6 +144,8 @@ cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
 install -p %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
 install -p %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
+
+ldconfig -n -X $RPM_BUILD_ROOT%{_libdir}
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -171,7 +168,7 @@ fi
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
 %attr(755,root,root) /%{_lib}/multipath/lib*.so
-%attr(755,root,root) /%{_lib}/libmultipath.so
+%attr(755,root,root) /%{_lib}/libmultipath.so.0
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
