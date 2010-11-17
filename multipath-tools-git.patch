@@ -1,0 +1,1200 @@
+diff --git a/libmultipath/alias.c b/libmultipath/alias.c
+index 95506b4..4159ec6 100644
+--- a/libmultipath/alias.c
++++ b/libmultipath/alias.c
+@@ -180,34 +180,35 @@ fail:
+ }
+ 
+ static int
+-format_devname(char *name, int id, int len)
++format_devname(char *name, int id, int len, char *prefix)
+ {
+ 	int pos;
++	int prefix_len = strlen(prefix);
+ 
+ 	memset(name,0, len);
+-	strcpy(name,"mpath");
+-	for (pos = len - 1; pos >= 5; pos--) {
++	strcpy(name, prefix);
++	for (pos = len - 1; pos >= prefix_len; pos--) {
+ 		name[pos] = 'a' + id % 26;
+ 		if (id < 26)
+ 			break;
+ 		id /= 26;
+ 		id--;
+ 	}
+-	memmove(name + 5, name + pos, len - pos);
+-	name[5 + len - pos] = '\0';
+-	return (5 + len - pos);
++	memmove(name + prefix_len, name + pos, len - pos);
++	name[prefix_len + len - pos] = '\0';
++	return (prefix_len + len - pos);
+ }
+ 
+ static int
+-scan_devname(char *alias)
++scan_devname(char *alias, char *prefix)
+ {
+ 	char *c;
+ 	int i, n = 0;
+ 
+-	if (strncmp(alias, "mpath", 5))
++	if (!prefix || strncmp(alias, prefix, strlen(prefix)))
+ 		return -1;
+ 
+-	c = alias + 5;
++	c = alias + strlen(prefix);
+ 	while (*c != '\0' && *c != ' ' && *c != '\t') {
+ 		i = *c - 'a';
+ 		n = ( n * 26 ) + i;
+@@ -221,7 +222,7 @@ scan_devname(char *alias)
+ }
+ 
+ static int
+-lookup_binding(FILE *f, char *map_wwid, char **map_alias)
++lookup_binding(FILE *f, char *map_wwid, char **map_alias, char *prefix)
+ {
+ 	char buf[LINE_MAX];
+ 	unsigned int line_nr = 0;
+@@ -240,7 +241,7 @@ lookup_binding(FILE *f, char *map_wwid, char **map_alias)
+ 		alias = strtok(buf, " \t");
+ 		if (!alias) /* blank line */
+ 			continue;
+-		curr_id = scan_devname(alias);
++		curr_id = scan_devname(alias, prefix);
+ 		if (curr_id >= id)
+ 			id = curr_id + 1;
+ 		wwid = strtok(NULL, "");
+@@ -284,7 +285,7 @@ rlookup_binding(FILE *f, char **map_wwid, char *map_alias)
+ 		alias = strtok(buf, " \t");
+ 		if (!alias) /* blank line */
+ 			continue;
+-		curr_id = scan_devname(alias);
++		curr_id = scan_devname(alias, NULL); /* TBD: Why this call? */
+ 		if (curr_id >= id)
+ 			id = curr_id + 1;
+ 		wwid = strtok(NULL, " \t");
+@@ -309,7 +310,7 @@ rlookup_binding(FILE *f, char **map_wwid, char *map_alias)
+ }
+ 
+ static char *
+-allocate_binding(int fd, char *wwid, int id)
++allocate_binding(int fd, char *wwid, int id, char *prefix)
+ {
+ 	char buf[LINE_MAX];
+ 	off_t offset;
+@@ -321,7 +322,7 @@ allocate_binding(int fd, char *wwid, int id)
+ 		return NULL;
+ 	}
+ 
+-	i = format_devname(buf, id, LINE_MAX);
++	i = format_devname(buf, id, LINE_MAX, prefix);
+ 	c = buf + i;
+ 	snprintf(c,LINE_MAX - i, " %s\n", wwid);
+ 	buf[LINE_MAX - 1] = '\0';
+@@ -352,7 +353,8 @@ allocate_binding(int fd, char *wwid, int id)
+ }
+ 
+ char *
+-get_user_friendly_alias(char *wwid, char *file)
++get_user_friendly_alias(char *wwid, char *file, char *prefix,
++			int bindings_read_only)
+ {
+ 	char *alias;
+ 	int fd, scan_fd, id;
+@@ -385,7 +387,7 @@ get_user_friendly_alias(char *wwid, char *file)
+ 		return NULL;
+ 	}
+ 
+-	id = lookup_binding(f, wwid, &alias);
++	id = lookup_binding(f, wwid, &alias, prefix);
+ 	if (id < 0) {
+ 		fclose(f);
+ 		close(scan_fd);
+@@ -393,8 +395,8 @@ get_user_friendly_alias(char *wwid, char *file)
+ 		return NULL;
+ 	}
+ 
+-	if (!alias && can_write)
+-		alias = allocate_binding(fd, wwid, id);
++	if (!alias && can_write && !bindings_read_only)
++		alias = allocate_binding(fd, wwid, id, prefix);
+ 
+ 	fclose(f);
+ 	close(scan_fd);
+diff --git a/libmultipath/alias.h b/libmultipath/alias.h
+index fe1191b..c489a86 100644
+--- a/libmultipath/alias.h
++++ b/libmultipath/alias.h
+@@ -8,5 +8,6 @@
+ "# alias wwid\n" \
+ "#\n"
+ 
+-char *get_user_friendly_alias(char *wwid, char *file);
++char *get_user_friendly_alias(char *wwid, char *file, char *prefix,
++			      int bindings_readonly);
+ char *get_user_friendly_wwid(char *alias, char *file);
+diff --git a/libmultipath/config.c b/libmultipath/config.c
+index a4178be..00acf96 100644
+--- a/libmultipath/config.c
++++ b/libmultipath/config.c
+@@ -158,6 +158,9 @@ free_hwe (struct hwentry * hwe)
+ 	if (hwe->prio_args)
+ 		FREE(hwe->prio_args);
+ 
++	if (hwe->alias_prefix)
++		FREE(hwe->alias_prefix);
++
+ 	if (hwe->bl_product)
+ 		FREE(hwe->bl_product);
+ 
+@@ -282,6 +285,7 @@ merge_hwe (struct hwentry * hwe1, struct hwentry * hwe2)
+ 	merge_str(checker_name);
+ 	merge_str(prio_name);
+ 	merge_str(prio_args);
++	merge_str(alias_prefix);
+ 	merge_str(bl_product);
+ 	merge_num(pgpolicy);
+ 	merge_num(pgfailback);
+@@ -333,6 +337,9 @@ store_hwe (vector hwtable, struct hwentry * dhwe)
+ 	if (dhwe->prio_args && !(hwe->prio_args = set_param_str(dhwe->prio_args)))
+ 		goto out;
+ 
++	if (dhwe->alias_prefix && !(hwe->alias_prefix = set_param_str(dhwe->alias_prefix)))
++		goto out;
++
+ 	hwe->pgpolicy = dhwe->pgpolicy;
+ 	hwe->pgfailback = dhwe->pgfailback;
+ 	hwe->rr_weight = dhwe->rr_weight;
+@@ -409,6 +416,9 @@ free_config (struct config * conf)
+ 	if (conf->prio_name)
+ 		FREE(conf->prio_name);
+ 
++	if (conf->alias_prefix)
++		FREE(conf->alias_prefix);
++
+ 	if (conf->prio_args)
+ 		FREE(conf->prio_args);
+ 
+@@ -448,6 +458,7 @@ load_config (char * file)
+ 	conf->minio = 1000;
+ 	conf->max_fds = 0;
+ 	conf->bindings_file = DEFAULT_BINDINGS_FILE;
++	conf->bindings_read_only = 0;
+ 	conf->multipath_dir = set_default(DEFAULT_MULTIPATHDIR);
+ 	conf->flush_on_last_del = 0;
+ 	conf->attribute_flags = 0;
+diff --git a/libmultipath/config.h b/libmultipath/config.h
+index 471eed0..5a5f81b 100644
+--- a/libmultipath/config.h
++++ b/libmultipath/config.h
+@@ -25,6 +25,7 @@ struct hwentry {
+ 	char * checker_name;
+ 	char * prio_name;
+ 	char * prio_args;
++	char * alias_prefix;
+ 
+ 	int pgpolicy;
+ 	int pgfailback;
+@@ -73,6 +74,7 @@ struct config {
+ 	int rr_weight;
+ 	int no_path_retry;
+ 	int user_friendly_names;
++	int bindings_read_only;
+ 	int pg_timeout;
+ 	int max_fds;
+ 	int force_reload;
+@@ -99,6 +101,7 @@ struct config {
+ 	char * prio_name;
+ 	char * prio_args;
+ 	char * checker_name;
++	char * alias_prefix;
+ 
+ 	vector keywords;
+ 	vector mptable;
+diff --git a/libmultipath/configure.c b/libmultipath/configure.c
+index c6ca4b6..a40bef3 100644
+--- a/libmultipath/configure.c
++++ b/libmultipath/configure.c
+@@ -284,6 +284,7 @@ lock_multipath (struct multipath * mpp, int lock)
+ 	struct pathgroup * pgp;
+ 	struct path * pp;
+ 	int i, j;
++	int x, y;
+ 
+ 	if (!mpp || !mpp->pg)
+ 		return 0;
+@@ -294,12 +295,25 @@ lock_multipath (struct multipath * mpp, int lock)
+ 		vector_foreach_slot(pgp->paths, pp, j) {
+ 			if (lock && flock(pp->fd, LOCK_EX | LOCK_NB) &&
+ 			    errno == EWOULDBLOCK)
+-				return 1;
++				goto fail;
+ 			else if (!lock)
+ 				flock(pp->fd, LOCK_UN);
+ 		}
+ 	}
+ 	return 0;
++fail:
++	vector_foreach_slot (mpp->pg, pgp, x) {
++		if (x > i)
++			return 1;
++		if (!pgp->paths)
++			continue;
++		vector_foreach_slot(pgp->paths, pp, y) {
++			if (x == i && y >= j)
++				return 1;
++			flock(pp->fd, LOCK_UN);
++		}
++	}
++	return 1;
+ }
+ 
+ /*
+@@ -577,11 +591,11 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid, int force_r
+ 
+ 			remove_map(mpp, vecs, 0);
+ 
+-			if (dm_flush_map(mpp->alias))
++			if (dm_flush_map(alias))
+ 				condlog(2, "%s: remove failed (dead)",
+-					mpp->alias);
++					alias);
+ 			else
+-				condlog(2, "%s: remove (dead)", mpp->alias);
++				condlog(2, "%s: remove (dead)", alias);
+ 		}
+ 	}
+ 	return 0;
+diff --git a/libmultipath/defaults.h b/libmultipath/defaults.h
+index 5a38d25..77526dd 100644
+--- a/libmultipath/defaults.h
++++ b/libmultipath/defaults.h
+@@ -2,6 +2,7 @@
+ #define DEFAULT_UDEVDIR		"/dev"
+ #define DEFAULT_MULTIPATHDIR	"/" LIB_STRING "/multipath"
+ #define DEFAULT_SELECTOR	"round-robin 0"
++#define DEFAULT_ALIAS_PREFIX	"mpath"
+ #define DEFAULT_FEATURES	"0"
+ #define DEFAULT_HWHANDLER	"0"
+ #define DEFAULT_MINIO		1000
+diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
+index 333659b..fb69ee8 100644
+--- a/libmultipath/devmapper.c
++++ b/libmultipath/devmapper.c
+@@ -777,35 +777,49 @@ out:
+ 	return r;
+ }
+ 
+-extern int
+-dm_get_name(char *uuid, char *name)
++extern char *
++dm_get_name(char *uuid)
+ {
+-	vector vec;
+-	struct multipath *mpp;
+-	int i, rc = 0;
+-
+-	vec = vector_alloc();
++	struct dm_task *dmt;
++	struct dm_info info;
++	char *prefixed_uuid, *name = NULL;
++	const char *nametmp;
+ 
+-	if (!vec)
+-		return 0;
++	dmt = dm_task_create(DM_DEVICE_INFO);
++	if (!dmt)
++		return NULL;
+ 
+-	if (dm_get_maps(vec)) {
+-		goto out;
++	prefixed_uuid = MALLOC(UUID_PREFIX_LEN + strlen(uuid) + 1);
++	if (!prefixed_uuid) {
++		condlog(0, "cannot create prefixed uuid : %s\n",
++			strerror(errno));
++		goto freeout;
+ 	}
++	sprintf(prefixed_uuid, UUID_PREFIX "%s", uuid);
++	if (!dm_task_set_uuid(dmt, prefixed_uuid))
++		goto freeout;
+ 
+-	vector_foreach_slot(vec, mpp, i) {
+-		if (!strcmp(uuid, mpp->wwid)) {
+-			strcpy(name, mpp->alias);
+-			rc=1;
+-			break;
+-		}
+-	}
+-out:
+-	vector_foreach_slot(vec, mpp, i) {
+-		free_multipath(mpp, KEEP_PATHS);
++	if (!dm_task_run(dmt))
++		goto freeout;
++
++	if (!dm_task_get_info(dmt, &info) || !info.exists)
++		goto freeout;
++
++	nametmp = dm_task_get_name(dmt);
++	if (nametmp && strlen(nametmp)) {
++		name = MALLOC(strlen(nametmp) + 1);
++		if (name)
++			strcpy(name, nametmp);
++	} else {
++		condlog(2, "%s: no device-mapper name found", uuid);
+ 	}
+-	vector_free(vec);
+-	return rc;
++
++freeout:
++	if (prefixed_uuid)
++		FREE(prefixed_uuid);
++	dm_task_destroy(dmt);
++
++	return name;
+ }
+ 
+ int
+diff --git a/libmultipath/devmapper.h b/libmultipath/devmapper.h
+index f3ffeaa..6c22bf3 100644
+--- a/libmultipath/devmapper.h
++++ b/libmultipath/devmapper.h
+@@ -37,6 +37,6 @@ int dm_remove_partmaps (const char * mapname, int need_sync);
+ int dm_get_uuid(char *name, char *uuid);
+ int dm_get_info (char * mapname, struct dm_info ** dmi);
+ int dm_rename (char * old, char * new);
+-int dm_get_name(char * uuid, char * name);
++char * dm_get_name(char * uuid);
+ 
+ #endif /* _DEVMAPPER_H */
+diff --git a/libmultipath/dict.c b/libmultipath/dict.c
+index 02aa238..964df9e 100644
+--- a/libmultipath/dict.c
++++ b/libmultipath/dict.c
+@@ -148,6 +148,17 @@ def_prio_handler(vector strvec)
+ }
+ 
+ static int
++def_alias_prefix_handler(vector strvec)
++{
++	conf->alias_prefix = set_value(strvec);
++
++	if (!conf->alias_prefix)
++		return 1;
++
++	return 0;
++}
++
++static int
+ def_prio_args_handler(vector strvec)
+ {
+ 	conf->prio_args = set_value(strvec);
+@@ -831,6 +842,22 @@ hw_prio_handler(vector strvec)
+ }
+ 
+ static int
++hw_alias_prefix_handler(vector strvec)
++{
++	struct hwentry * hwe = VECTOR_LAST_SLOT(conf->hwtable);
++
++	if (!hwe)
++		return 1;
++
++	hwe->alias_prefix = set_value(strvec);
++
++	if (!hwe->alias_prefix)
++		return 1;
++
++	return 0;
++}
++
++static int
+ hw_prio_args_handler(vector strvec)
+ {
+ 	struct hwentry * hwe = VECTOR_LAST_SLOT(conf->hwtable);
+@@ -1580,6 +1607,19 @@ snprint_hw_prio (char * buff, int len, void * data)
+ }
+ 
+ static int
++snprint_hw_alias_prefix (char * buff, int len, void * data)
++{
++	struct hwentry * hwe = (struct hwentry *)data;
++
++	if (!hwe->alias_prefix || (strlen(hwe->alias_prefix) == 0))
++		return 0;
++	if (conf->alias_prefix && !strcmp(hwe->alias_prefix, conf->alias_prefix))
++		return 0;
++
++	return snprintf(buff, len, "%s", hwe->alias_prefix);
++}
++
++static int
+ snprint_hw_prio_args (char * buff, int len, void * data)
+ {
+ 	struct hwentry * hwe = (struct hwentry *)data;
+@@ -2076,6 +2116,16 @@ snprint_def_user_friendly_names (char * buff, int len, void * data)
+ }
+ 
+ static int
++snprint_def_alias_prefix (char * buff, int len, void * data)
++{
++	if (!conf->alias_prefix)
++		return 0;
++	if (!strcmp(conf->alias_prefix, DEFAULT_ALIAS_PREFIX))
++		return 0;
++	return snprintf(buff, len, conf->alias_prefix);
++}
++
++static int
+ snprint_ble_simple (char * buff, int len, void * data)
+ {
+ 	struct blentry * ble = (struct blentry *)data;
+@@ -2117,6 +2167,7 @@ init_keywords(void)
+ 	install_keyword("features", &def_features_handler, &snprint_def_features);
+ 	install_keyword("path_checker", &def_path_checker_handler, &snprint_def_path_checker);
+ 	install_keyword("checker", &def_path_checker_handler, &snprint_def_path_checker);
++	install_keyword("alias_prefix", &def_alias_prefix_handler, &snprint_def_alias_prefix);
+ 	install_keyword("failback", &default_failback_handler, &snprint_def_failback);
+ 	install_keyword("rr_min_io", &def_minio_handler, &snprint_def_rr_min_io);
+ 	install_keyword("max_fds", &max_fds_handler, &snprint_max_fds);
+@@ -2138,17 +2189,17 @@ init_keywords(void)
+ 	__deprecated install_keyword("default_path_checker", &def_path_checker_handler, NULL);
+ 
+ 	install_keyword_root("blacklist", &blacklist_handler);
+-	install_keyword("devnode", &ble_devnode_handler, &snprint_ble_simple);
+-	install_keyword("wwid", &ble_wwid_handler, &snprint_ble_simple);
+-	install_keyword("device", &ble_device_handler, NULL);
++	install_keyword_multi("devnode", &ble_devnode_handler, &snprint_ble_simple);
++	install_keyword_multi("wwid", &ble_wwid_handler, &snprint_ble_simple);
++	install_keyword_multi("device", &ble_device_handler, NULL);
+ 	install_sublevel();
+ 	install_keyword("vendor", &ble_vendor_handler, &snprint_bled_vendor);
+ 	install_keyword("product", &ble_product_handler, &snprint_bled_product);
+ 	install_sublevel_end();
+ 	install_keyword_root("blacklist_exceptions", &blacklist_exceptions_handler);
+-	install_keyword("devnode", &ble_except_devnode_handler, &snprint_ble_simple);
+-	install_keyword("wwid", &ble_except_wwid_handler, &snprint_ble_simple);
+-	install_keyword("device", &ble_except_device_handler, NULL);
++	install_keyword_multi("devnode", &ble_except_devnode_handler, &snprint_ble_simple);
++	install_keyword_multi("wwid", &ble_except_wwid_handler, &snprint_ble_simple);
++	install_keyword_multi("device", &ble_except_device_handler, NULL);
+ 	install_sublevel();
+ 	install_keyword("vendor", &ble_except_vendor_handler, &snprint_bled_vendor);
+ 	install_keyword("product", &ble_except_product_handler, &snprint_bled_product);
+@@ -2166,7 +2217,7 @@ init_keywords(void)
+ #endif
+ 
+ 	install_keyword_root("devices", &devices_handler);
+-	install_keyword("device", &device_handler, NULL);
++	install_keyword_multi("device", &device_handler, NULL);
+ 	install_sublevel();
+ 	install_keyword("vendor", &vendor_handler, &snprint_hw_vendor);
+ 	install_keyword("product", &product_handler, &snprint_hw_product);
+@@ -2176,6 +2227,7 @@ init_keywords(void)
+ 	install_keyword("path_selector", &hw_selector_handler, &snprint_hw_selector);
+ 	install_keyword("path_checker", &hw_path_checker_handler, &snprint_hw_path_checker);
+ 	install_keyword("checker", &hw_path_checker_handler, &snprint_hw_path_checker);
++	install_keyword("alias_prefix", &hw_alias_prefix_handler, &snprint_hw_alias_prefix);
+ 	install_keyword("features", &hw_features_handler, &snprint_hw_features);
+ 	install_keyword("hardware_handler", &hw_handler_handler, &snprint_hw_hardware_handler);
+ 	install_keyword("prio", &hw_prio_handler, &snprint_hw_prio);
+@@ -2191,7 +2243,7 @@ init_keywords(void)
+ 	install_sublevel_end();
+ 
+ 	install_keyword_root("multipaths", &multipaths_handler);
+-	install_keyword("multipath", &multipath_handler, NULL);
++	install_keyword_multi("multipath", &multipath_handler, NULL);
+ 	install_sublevel();
+ 	install_keyword("wwid", &wwid_handler, &snprint_mp_wwid);
+ 	install_keyword("alias", &alias_handler, &snprint_mp_alias);
+diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
+index 122eb8f..c371b47 100644
+--- a/libmultipath/discovery.c
++++ b/libmultipath/discovery.c
+@@ -10,6 +10,7 @@
+ #include <sys/stat.h>
+ #include <dirent.h>
+ #include <errno.h>
++#include <libgen.h>
+ 
+ #include "checkers.h"
+ #include "vector.h"
+@@ -204,6 +205,41 @@ sysfs_get_fc_nodename (struct sysfs_device * dev, char * node,
+ 	return 1;
+ }
+ 
++static int
++find_rport_id(struct path *pp)
++{
++	char attr_path[SYSFS_PATH_SIZE];
++	char *dir, *base;
++	int host, channel, rport_id = -1;
++
++	if (safe_sprintf(attr_path,
++			 "/class/fc_transport/target%i:%i:%i",
++			 pp->sg_id.host_no, pp->sg_id.channel,
++			 pp->sg_id.scsi_id)) {
++		condlog(0, "attr_path too small for target");
++		return 1;
++	}
++
++	if (sysfs_resolve_link(attr_path, SYSFS_PATH_SIZE))
++		return -1;
++
++	condlog(4, "target%d:%d:%d -> path %s", pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.scsi_id, attr_path);
++	dir = attr_path;
++	do {
++		base = basename(dir);
++		dir = dirname(dir);
++
++		if (sscanf((const char *)base, "rport-%d:%d-%d", &host, &channel, &rport_id) == 3)
++			break;
++	} while (strcmp((const char *)dir, "/"));
++
++	if (rport_id < 0)
++		return -1;
++
++	condlog(4, "target%d:%d:%d -> rport_id %d", pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.scsi_id, rport_id);
++	return rport_id;
++}
++
+ int
+ sysfs_set_scsi_tmo (struct multipath *mpp)
+ {
+@@ -211,15 +247,22 @@ sysfs_set_scsi_tmo (struct multipath *mpp)
+ 	struct path *pp;
+ 	int i;
+ 	char value[11];
++	int rport_id;
+ 
+ 	if (!mpp->dev_loss && !mpp->fast_io_fail)
+ 		return 0;
+ 	vector_foreach_slot(mpp->paths, pp, i) {
++		rport_id = find_rport_id(pp);
++		if (rport_id < 0) {
++			condlog(0, "failed to find rport_id for target%d:%d:%d", pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.scsi_id);
++			return 1;
++		}
++
+ 		if (safe_snprintf(attr_path, SYSFS_PATH_SIZE,
+ 				  "/class/fc_remote_ports/rport-%d:%d-%d",
+ 				  pp->sg_id.host_no, pp->sg_id.channel,
+-				  pp->sg_id.scsi_id)) {
+-			condlog(0, "attr_path '/class/fc_remote_ports/rport-%d:%d-%d' too large", pp->sg_id.host_no, pp->sg_id.channel, pp->sg_id.scsi_id);
++				  rport_id)) {
++			condlog(0, "attr_path '/class/fc_remote_ports/rport-%d:%d-%d' too large", pp->sg_id.host_no, pp->sg_id.channel, rport_id);
+ 			return 1;
+ 		}
+ 		if (mpp->dev_loss){
+diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
+index e4fe380..9933f76 100644
+--- a/libmultipath/hwtable.c
++++ b/libmultipath/hwtable.c
+@@ -759,7 +759,23 @@ static struct hwentry default_hw[] = {
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+ 	},
+-
++	{
++		/* AIX NVDISK */
++		.vendor        = "AIX",
++		.product       = "NVDISK",
++		.getuid        = DEFAULT_GETUID,
++		.features      = DEFAULT_FEATURES,
++		.hwhandler     = "1 alua",
++		.selector      = DEFAULT_SELECTOR,
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = -FAILBACK_IMMEDIATE,
++		.rr_weight     = RR_WEIGHT_NONE,
++		.no_path_retry = (300 / DEFAULT_CHECKINT),
++		.minio         = DEFAULT_MINIO,
++		.checker_name  = TUR,
++		.prio_name     = PRIO_ALUA,
++		.prio_args     = NULL,
++	},
+ 	{
+ 		/* DELL MD3000 */
+ 		.vendor        = "DELL",
+@@ -916,6 +932,7 @@ static struct hwentry default_hw[] = {
+ 		.prio_name     = PRIO_ALUA,
+ 		.prio_args     = NULL,
+ 	},
++
+ 	/*
+ 	 * SGI arrays
+ 	 *
+diff --git a/libmultipath/parser.c b/libmultipath/parser.c
+index eb3815e..b964ce7 100644
+--- a/libmultipath/parser.c
++++ b/libmultipath/parser.c
+@@ -21,11 +21,13 @@
+ 
+ #include "parser.h"
+ #include "memory.h"
++#include "debug.h"
+ 
+ /* local vars */
+ static int sublevel = 0;
+ vector keywords = NULL;
+ vector *keywords_addr = NULL;
++static int line_nr;
+ 
+ void set_current_keywords (vector *k)
+ {
+@@ -35,7 +37,7 @@ void set_current_keywords (vector *k)
+ 
+ int
+ keyword_alloc(vector keywords, char *string, int (*handler) (vector),
+-		int (*print) (char *, int, void *))
++		int (*print) (char *, int, void *), int unique)
+ {
+ 	struct keyword *keyword;
+ 
+@@ -51,6 +53,7 @@ keyword_alloc(vector keywords, char *string, int (*handler) (vector),
+ 	keyword->string = string;
+ 	keyword->handler = handler;
+ 	keyword->print = print;
++	keyword->unique = unique;
+ 
+ 	vector_set_slot(keywords, keyword);
+ 
+@@ -60,7 +63,7 @@ keyword_alloc(vector keywords, char *string, int (*handler) (vector),
+ int
+ install_keyword_root(char *string, int (*handler) (vector))
+ {
+-	int r = keyword_alloc(keywords, string, handler, NULL);
++	int r = keyword_alloc(keywords, string, handler, NULL, 1);
+ 	if (!r)
+ 		*keywords_addr = keywords;
+ 	return r;
+@@ -79,8 +82,8 @@ install_sublevel_end(void)
+ }
+ 
+ int
+-install_keyword(char *string, int (*handler) (vector),
+-		int (*print) (char *, int, void *))
++_install_keyword(char *string, int (*handler) (vector),
++		int (*print) (char *, int, void *), int unique)
+ {
+ 	int i = 0;
+ 	struct keyword *keyword;
+@@ -101,7 +104,7 @@ install_keyword(char *string, int (*handler) (vector),
+ 		return 1;
+ 
+ 	/* add new sub keyword */
+-	return keyword_alloc(keyword->sub, string, handler, print);
++	return keyword_alloc(keyword->sub, string, handler, print, unique);
+ }
+ 
+ void
+@@ -419,6 +422,39 @@ set_value(vector strvec)
+ 
+ /* non-recursive configuration stream handler */
+ static int kw_level = 0;
++
++int warn_on_duplicates(vector uniques, char *str)
++{
++	char *tmp;
++	int i;
++
++	vector_foreach_slot(uniques, tmp, i) {
++		if (!strcmp(str, tmp)) {
++			condlog(1, "multipath.conf line %d, duplicate keyword: %s", line_nr, str);
++			return 0;
++		}
++	}
++	tmp = strdup(str);
++	if (!tmp)
++		return 1;
++	if (!vector_alloc_slot(uniques)) {
++		free(tmp);
++		return 1;
++	}
++	vector_set_slot(uniques, tmp);
++	return 0;
++}
++
++void free_uniques(vector uniques)
++{
++	char *tmp;
++	int i;
++
++	vector_foreach_slot(uniques, tmp, i)
++		free(tmp);
++	vector_free(uniques);
++}
++
+ int
+ process_stream(vector keywords)
+ {
+@@ -428,13 +464,21 @@ process_stream(vector keywords)
+ 	char *str;
+ 	char *buf;
+ 	vector strvec;
++	vector uniques;
++
++	uniques = vector_alloc();
++	if (!uniques)
++		return 1;
+ 
+ 	buf = MALLOC(MAXBUF);
+ 
+-	if (!buf)
++	if (!buf) {
++		vector_free(uniques);
+ 		return 1;
++	}
+ 
+ 	while (read_line(buf, MAXBUF)) {
++		line_nr++;
+ 		strvec = alloc_strvec(buf);
+ 		memset(buf,0, MAXBUF);
+ 
+@@ -452,6 +496,12 @@ process_stream(vector keywords)
+ 			keyword = VECTOR_SLOT(keywords, i);
+ 
+ 			if (!strcmp(keyword->string, str)) {
++				if (keyword->unique &&
++				    warn_on_duplicates(uniques, str)) {
++						r = 1;
++						free_strvec(strvec);
++						goto out;
++				}
+ 				if (keyword->handler)
+ 					r += (*keyword->handler) (strvec);
+ 
+@@ -463,11 +513,16 @@ process_stream(vector keywords)
+ 				break;
+ 			}
+ 		}
++		if (i >= VECTOR_SIZE(keywords))
++			condlog(1, "multipath.conf +%d, invalid keyword: %s",
++				line_nr, str);
+ 
+ 		free_strvec(strvec);
+ 	}
+ 
++out:
+ 	FREE(buf);
++	free_uniques(uniques);
+ 	return r;
+ }
+ 
+@@ -496,6 +551,7 @@ init_data(char *conf_file, void (*init_keywords) (void))
+ */
+ 
+ 	/* Stream handling */
++	line_nr = 0;
+ 	r = process_stream(keywords);
+ 	fclose(stream);
+ 	//free_keywords(keywords);
+diff --git a/libmultipath/parser.h b/libmultipath/parser.h
+index 95d4e6f..fb182ec 100644
+--- a/libmultipath/parser.h
++++ b/libmultipath/parser.h
+@@ -44,6 +44,7 @@ struct keyword {
+ 	int (*handler) (vector);
+ 	int (*print) (char *, int, void *);
+ 	vector sub;
++	int unique;
+ };
+ 
+ /* global var exported */
+@@ -60,12 +61,14 @@ FILE *stream;
+ 
+ /* Prototypes */
+ extern int keyword_alloc(vector keywords, char *string, int (*handler) (vector),
+-			 int (*print) (char *, int, void *));
++			 int (*print) (char *, int, void *), int unique);
+ extern int install_keyword_root(char *string, int (*handler) (vector));
+ extern void install_sublevel(void);
+ extern void install_sublevel_end(void);
+-extern int install_keyword(char *string, int (*handler) (vector),
+-			   int (*print) (char *, int, void *));
++extern int _install_keyword(char *string, int (*handler) (vector),
++			    int (*print) (char *, int, void *), int unique);
++#define install_keyword(str, vec, pri) _install_keyword(str, vec, pri, 1)
++#define install_keyword_multi(str, vec, pri) _install_keyword(str, vec, pri, 0)
+ extern void dump_keywords(vector keydump, int level);
+ extern void free_keywords(vector keywords);
+ extern vector alloc_strvec(char *string);
+diff --git a/libmultipath/prioritizers/alua_rtpg.c b/libmultipath/prioritizers/alua_rtpg.c
+index 0531052..b85cfdf 100644
+--- a/libmultipath/prioritizers/alua_rtpg.c
++++ b/libmultipath/prioritizers/alua_rtpg.c
+@@ -266,7 +266,7 @@ get_asymmetric_access_state(int fd, unsigned int tpg)
+ 	memset(buf, 0, buflen);
+ 	rc = do_rtpg(fd, buf, buflen);
+ 	if (rc < 0)
+-		return rc;
++		goto out;
+ 	scsi_buflen = (buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3]) + 4;
+ 	if (buflen < scsi_buflen) {
+ 		free(buf);
+diff --git a/libmultipath/propsel.c b/libmultipath/propsel.c
+index 2187558..80e0c40 100644
+--- a/libmultipath/propsel.c
++++ b/libmultipath/propsel.c
+@@ -215,27 +215,42 @@ select_selector (struct multipath * mp)
+ 	return 0;
+ }
+ 
++static void
++select_alias_prefix (struct multipath * mp)
++{
++	if (mp->hwe && mp->hwe->alias_prefix) {
++		mp->alias_prefix = mp->hwe->alias_prefix;
++		condlog(3, "%s: alias_prefix = %s (controller setting)",
++			mp->wwid, mp->alias_prefix);
++		return;
++	}
++	if (conf->alias_prefix) {
++		mp->alias_prefix = conf->alias_prefix;
++		condlog(3, "%s: alias_prefix = %s (config file default)",
++			mp->wwid, mp->alias_prefix);
++		return;
++	}
++	mp->alias_prefix = set_default(DEFAULT_ALIAS_PREFIX);
++	condlog(3, "%s: alias_prefix = %s (internal default)",
++		mp->wwid, mp->alias_prefix);
++}
++
+ extern int
+ select_alias (struct multipath * mp)
+ {
+ 	if (mp->mpe && mp->mpe->alias)
+-		mp->alias = mp->mpe->alias;
++		mp->alias = STRDUP(mp->mpe->alias);
+ 	else {
+ 		mp->alias = NULL;
+-		if (conf->user_friendly_names)
++		if (conf->user_friendly_names) {
++			select_alias_prefix(mp);
+ 			mp->alias = get_user_friendly_alias(mp->wwid,
+-					conf->bindings_file);
+-		if (mp->alias == NULL){
+-			char *alias;
+-			if ((alias = MALLOC(WWID_SIZE)) != NULL){
+-				if (dm_get_name(mp->wwid, alias) == 1)
+-					mp->alias = alias;
+-				else
+-					FREE(alias);
+-			}
++					conf->bindings_file, mp->alias_prefix, conf->bindings_read_only);
+ 		}
+ 		if (mp->alias == NULL)
+-			mp->alias = mp->wwid;
++			mp->alias = dm_get_name(mp->wwid);
++		if (mp->alias == NULL)
++			mp->alias = STRDUP(mp->wwid);
+ 	}
+ 
+ 	return 0;
+@@ -450,7 +465,7 @@ select_pg_timeout(struct multipath *mp)
+ 		return 0;
+ 	}
+ 	mp->pg_timeout = PGTIMEOUT_UNDEF;
+-	condlog(3, "pg_timeout = NONE (internal default)");
++	condlog(3, "%s: pg_timeout = NONE (internal default)", mp->alias);
+ 	return 0;
+ }
+ 
+diff --git a/libmultipath/structs.c b/libmultipath/structs.c
+index a4b86d2..82df680 100644
+--- a/libmultipath/structs.c
++++ b/libmultipath/structs.c
+@@ -163,9 +163,7 @@ free_multipath (struct multipath * mpp, int free_paths)
+ 
+ 	free_multipath_attributes(mpp);
+ 
+-	if (mpp->alias &&
+-	    (!mpp->mpe || (mpp->mpe && mpp->alias != mpp->mpe->alias)) &&
+-	    (mpp->wwid && mpp->alias != mpp->wwid)) {
++	if (mpp->alias) {
+ 		FREE(mpp->alias);
+ 		mpp->alias = NULL;
+ 	}
+diff --git a/libmultipath/structs.h b/libmultipath/structs.h
+index c559838..fc6413b 100644
+--- a/libmultipath/structs.h
++++ b/libmultipath/structs.h
+@@ -186,6 +186,7 @@ struct multipath {
+ 
+ 	/* configlet pointers */
+ 	char * alias;
++	char * alias_prefix;
+ 	char * selector;
+ 	char * features;
+ 	char * hwhandler;
+diff --git a/libmultipath/structs_vec.c b/libmultipath/structs_vec.c
+index 699efa1..c526a70 100644
+--- a/libmultipath/structs_vec.c
++++ b/libmultipath/structs_vec.c
+@@ -335,16 +335,18 @@ retry:
+ 	condlog(3, "%s: discover", mpp->alias);
+ 
+ 	if (update_multipath_strings(mpp, vecs->pathvec)) {
+-		char new_alias[WWID_SIZE];
++		char *new_alias;
+ 
+ 		/*
+ 		 * detect an external rename of the multipath device
+ 		 */
+-		if (dm_get_name(mpp->wwid, new_alias)) {
++		new_alias = dm_get_name(mpp->wwid);
++		if (new_alias) {
+ 			condlog(3, "%s multipath mapped device name has "
+ 				"changed from %s to %s", mpp->wwid,
+ 				mpp->alias, new_alias);
+-			strcpy(mpp->alias, new_alias);
++			FREE(mpp->alias);
++			mpp->alias = new_alias;
+ 
+ 			if (mpp->waiter)
+ 				strncpy(((struct event_thread *)mpp->waiter)->mapname,
+diff --git a/libmultipath/vector.c b/libmultipath/vector.c
+index 3415461..67c7500 100644
+--- a/libmultipath/vector.c
++++ b/libmultipath/vector.c
+@@ -96,7 +96,7 @@ vector_del_slot(vector v, int slot)
+ 		v->slot = NULL;
+ 	}
+ 	else
+-		v = REALLOC(v->slot, sizeof (void *) * v->allocated);
++		v->slot = REALLOC(v->slot, sizeof (void *) * v->allocated);
+ }
+ 
+ void
+diff --git a/multipath.conf.defaults b/multipath.conf.defaults
+index 886a678..9f737aa 100644
+--- a/multipath.conf.defaults
++++ b/multipath.conf.defaults
+@@ -552,6 +552,47 @@
+ #		prio_args		""
+ #	}
+ #	device {
++#		vendor			"IBM"
++#		product			"3303      NVDISK"
++#		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#               path_grouping_policy    failover
++#		failback		immediate
++#		no_path_retry		60
++#		rr_weight		uniform
++#		rr_min_io		1000
++#               path_checker            tur
++#	}
++#	device {
++#		vendor			"AIX"
++#		product			"VDASD"
++#		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
++#		features		"0"
++#		hardware_handler	"0"
++#               path_grouping_policy    multibus
++#		failback		immediate
++#		no_path_retry		60
++#		rr_weight		uniform
++#		rr_min_io		1000
++#               path_checker            directio
++#	}
++#	device {
++#		vendor			"AIX"
++#		product			"NVDISK"
++#		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
++#		features		"0"
++#		hardware_handler	"1 alua"
++#               path_grouping_policy    group_by_prio
++#		failback		immediate
++#		no_path_retry		60
++#		rr_weight		uniform
++#		rr_min_io		1000
++#		path_checker            tur
++#		prio			alua
++#		prio_args		""
++#	}
++#	device {
+ #		vendor			"SGI"
+ #		product			"TP9[13]00"
+ #		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+diff --git a/multipath/Makefile b/multipath/Makefile
+index 5cbab2f..f748417 100644
+--- a/multipath/Makefile
++++ b/multipath/Makefile
+@@ -7,7 +7,7 @@ include ../Makefile.inc
+ OBJS = main.o
+ 
+ CFLAGS += -I$(multipathdir)
+-LDFLAGS += -lpthread -ldevmapper -ldl -lmultipath -L$(multipathdir)
++LDFLAGS += -lpthread -ldevmapper -ldl -L$(multipathdir) -lmultipath
+ 
+ EXEC = multipath
+ 
+diff --git a/multipath/main.c b/multipath/main.c
+index 1689efd..0f28185 100644
+--- a/multipath/main.c
++++ b/multipath/main.c
+@@ -350,7 +350,7 @@ main (int argc, char *argv[])
+ 		condlog(0, "multipath tools need sysfs mounted");
+ 		exit(1);
+ 	}
+-	while ((arg = getopt(argc, argv, ":dhl::FfM:v:p:b:r")) != EOF ) {
++	while ((arg = getopt(argc, argv, ":dhl::FfM:v:p:b:Br")) != EOF ) {
+ 		switch(arg) {
+ 		case 1: printf("optarg : %s\n",optarg);
+ 			break;
+@@ -364,6 +364,9 @@ main (int argc, char *argv[])
+ 		case 'b':
+ 			conf->bindings_file = optarg;
+ 			break;
++		case 'B':
++			conf->bindings_read_only = 1;
++			break;
+ 		case 'd':
+ 			conf->dry_run = 1;
+ 			break;
+diff --git a/multipath/multipath.8 b/multipath/multipath.8
+index 7ba7126..2a6e0aa 100644
+--- a/multipath/multipath.8
++++ b/multipath/multipath.8
+@@ -6,7 +6,7 @@ multipath \- Device mapper target autoconfig
+ .RB [\| \-v\ \c
+ .IR verbosity \|]
+ .RB [\| \-d \|]
+-.RB [\| \-h | \-l | \-ll | \-f | \-F \|]
++.RB [\| \-h | \-l | \-ll | \-f | \-F | \-B \|]
+ .RB [\| \-p\ \c
+ .BR failover | multibus | group_by_serial | group_by_prio | group_by_node_name \|]
+ .RB [\| device \|]
+@@ -47,6 +47,9 @@ flush a multipath device map specified as parameter, if unused
+ .B \-F
+ flush all unused multipath device maps
+ .TP
++.B \-B
++treat the bindings file as read only
++.TP
+ .BI \-p " policy"
+ force maps to specified policy:
+ .RS 1.2i
+diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
+index 165982e..8c191ce 100644
+--- a/multipath/multipath.conf.5
++++ b/multipath/multipath.conf.5
+@@ -40,7 +40,8 @@ The following \fIsection\fP keywords are recognized:
+ .TP 17
+ .B defaults
+ This section defines default values for attributes which are used
+-whenever no specific setting is given.
++whenever no values are given in the appropriate device or multipath
++sections.
+ .TP
+ .B blacklist
+ This section defines which devices should be excluded from the
+diff --git a/multipathd/Makefile b/multipathd/Makefile
+index 32d9ef5..03b0aa2 100644
+--- a/multipathd/Makefile
++++ b/multipathd/Makefile
+@@ -7,7 +7,7 @@ include ../Makefile.inc
+ #
+ CFLAGS += -I$(multipathdir)
+ LDFLAGS += -lpthread -ldevmapper -lreadline -lncurses -ldl \
+-	   -lmultipath -L$(multipathdir)
++	   -L$(multipathdir) -lmultipath
+ 
+ #
+ # debuging stuff
+@@ -28,7 +28,7 @@ OBJS = main.o pidfile.o uxlsnr.o uxclnt.o cli.o cli_handlers.o
+ all : $(EXEC)
+ 
+ $(EXEC): $(OBJS)
+-	$(CC) $(CFLAGS) $(LDFLAGS) -o $(EXEC) $(OBJS)
++	$(CC) $(CFLAGS) $(OBJS) $(LDFLAGS) -o $(EXEC)
+ 	$(GZIP) $(EXEC).8 > $(EXEC).8.gz
+ 
+ install:
+diff --git a/multipathd/cli.c b/multipathd/cli.c
+index 208a0ad..b39a47f 100644
+--- a/multipathd/cli.c
++++ b/multipathd/cli.c
+@@ -363,7 +363,7 @@ parse_cmd (char * cmd, char ** reply, int * len, void * data)
+ {
+ 	int r;
+ 	struct handler * h;
+-	vector cmdvec;
++	vector cmdvec = NULL;
+ 
+ 	r = get_cmdvec(cmd, &cmdvec);
+ 
+@@ -467,7 +467,7 @@ key_generator (const char * str, int state)
+ 	struct key * kw;
+ 	int i;
+ 	struct handler *h;
+-	vector v;
++	vector v = NULL;
+ 
+ 	if (!state) {
+ 		index = 0;
+diff --git a/multipathd/main.c b/multipathd/main.c
+index 6ee7903..e167b8b 100644
+--- a/multipathd/main.c
++++ b/multipathd/main.c
+@@ -47,6 +47,7 @@
+ #include <print.h>
+ #include <configure.h>
+ #include <prio.h>
++#include <pgpolicies.h>
+ 
+ #include "main.h"
+ #include "pidfile.h"
+@@ -917,10 +918,33 @@ retry_count_tick(vector mpvec)
+ 	}
+ }
+ 
++int update_path_groups(struct multipath *mpp, struct vectors *vecs)
++{
++	int i;
++	struct path * pp;
++
++	update_mpp_paths(mpp, vecs->pathvec);
++	vector_foreach_slot (mpp->paths, pp, i)
++		pathinfo(pp, conf->hwtable, DI_PRIO);
++	setup_map(mpp);
++	mpp->action = ACT_RELOAD;
++	if (domap(mpp) <= 0) {
++		condlog(0, "%s: failed to update map : %s", mpp->alias,
++				strerror(errno));
++		return 1;
++	}
++	dm_lib_release();
++	setup_multipath(vecs, mpp);
++	sync_map_state(mpp);
++
++	return 0;
++}
++
+ void
+ check_path (struct vectors * vecs, struct path * pp)
+ {
+ 	int newstate;
++	int oldpriority;
+ 
+ 	if (!pp->mpp)
+ 		return;
+@@ -1030,12 +1054,16 @@ check_path (struct vectors * vecs, struct path * pp)
+ 	 * path prio refreshing
+ 	 */
+ 	condlog(4, "path prio refresh");
++	oldpriority = pp->priority;
+ 	pathinfo(pp, conf->hwtable, DI_PRIO);
+ 
+ 	/*
+ 	 * pathgroup failback policy
+ 	 */
+-	if (need_switch_pathgroup(pp->mpp, 0)) {
++	if (pp->priority != oldpriority &&
++	    pp->mpp->pgpolicyfn == (pgpolicyfn *)group_by_prio)
++		update_path_groups(pp->mpp, vecs);
++	else if (need_switch_pathgroup(pp->mpp, 0)) {
+ 		if (pp->mpp->pgfailback > 0 &&
+ 		    pp->mpp->failback_tick <= 0)
+ 			pp->mpp->failback_tick =

@@ -18,6 +18,7 @@ Source3:	%{name}-bindings
 Source4:	%{name}-initramfs-hooks
 Source5:	%{name}-initramfs-local-top
 URL:		http://christophe.varoqui.free.fr/
+Patch100:	%{name}-git.patch
 Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
@@ -109,6 +110,7 @@ dla initramfs-tools.
 
 %prep
 %setup -qc
+%patch100 -p1
 %patch0 -p1
 %patch1 -p1
 %patch2 -p1
