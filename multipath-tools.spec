@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.9
-Release:	1
+Release:	2
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -144,8 +144,6 @@ cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
 install -p %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
 install -p %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
-
-ldconfig -n -X $RPM_BUILD_ROOT%{_libdir}
 
 %clean
 rm -rf $RPM_BUILD_ROOT
