@@ -1,12 +1,12 @@
 #
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
-#
+
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.9
-Release:	2
+Release:	3
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -38,13 +38,13 @@ Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
 %if "%{pld_release}" == "th"
-Conflicts:	udev < 1:127
+Requires:	udev-core >= 1:127
 %endif
 %if "%{pld_release}" == "ti"
 Conflicts:	udev < 1:124-3
 %endif
 %if "%{pld_release}" == "ac"
-Conflicts:	udev < 1:079-10
+Requires:	udev-core >= 1:079-10
 %endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
