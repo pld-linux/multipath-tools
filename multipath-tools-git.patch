@@ -1,3 +1,110 @@
+diff --git a/kpartx/devmapper.c b/kpartx/devmapper.c
+index f884511..7ebc5b6 100644
+--- a/kpartx/devmapper.c
++++ b/kpartx/devmapper.c
+@@ -81,7 +81,7 @@ dm_simplecmd (int task, const char *name, int no_flush, uint32_t *cookie) {
+ 
+ extern int
+ dm_addmap (int task, const char *name, const char *target,
+-	   const char *params, uint64_t size, const char *uuid, int part,
++	   const char *params, uint64_t size, int ro, const char *uuid, int part,
+ 	   mode_t mode, uid_t uid, gid_t gid, uint32_t *cookie) {
+ 	int r = 0;
+ 	struct dm_task *dmt;
+@@ -96,6 +96,9 @@ dm_addmap (int task, const char *name, const char *target,
+ 	if (!dm_task_add_target (dmt, 0, size, target, params))
+ 		goto addout;
+ 
++	if (ro && !dm_task_set_ro (dmt))
++			goto addout;
++
+ 	if (task == DM_DEVICE_CREATE && uuid) {
+ 		prefixed_uuid = malloc(MAX_PREFIX_LEN + strlen(uuid) + 1);
+ 		if (!prefixed_uuid) {
+diff --git a/kpartx/devmapper.h b/kpartx/devmapper.h
+index f8692cc..6226129 100644
+--- a/kpartx/devmapper.h
++++ b/kpartx/devmapper.h
+@@ -5,7 +5,7 @@
+ int dm_prereq (char *, int, int, int);
+ int dm_simplecmd (int, const char *, int, uint32_t *);
+ int dm_addmap (int, const char *, const char *, const char *, uint64_t,
+-	       const char *, int, mode_t, uid_t, gid_t, uint32_t *);
++	       int, const char *, int, mode_t, uid_t, gid_t, uint32_t *);
+ int dm_map_present (char *);
+ char * dm_mapname(int major, int minor);
+ dev_t dm_get_first_dep(char *devname);
+diff --git a/kpartx/kpartx.c b/kpartx/kpartx.c
+index 3d33990..f518aa0 100644
+--- a/kpartx/kpartx.c
++++ b/kpartx/kpartx.c
+@@ -82,7 +82,7 @@ initpts(void)
+ 	addpts("sun", read_sun_pt);
+ }
+ 
+-static char short_opts[] = "ladgvp:t:s";
++static char short_opts[] = "rladgvp:t:s";
+ 
+ /* Used in gpt.c */
+ int force_gpt=0;
+@@ -91,6 +91,7 @@ static int
+ usage(void) {
+ 	printf("usage : kpartx [-a|-d|-l] [-v] wholedisk\n");
+ 	printf("\t-a add partition devmappings\n");
++	printf("\t-r devmappings will be readonly\n");
+ 	printf("\t-d del partition devmappings\n");
+ 	printf("\t-l list partitions devmappings that would be added by -a\n");
+ 	printf("\t-p set device name-partition number delimiter\n");
+@@ -185,7 +186,7 @@ get_hotplug_device(void)
+ 
+ int
+ main(int argc, char **argv){
+-	int fd, i, j, m, n, op, off, arg, c, d;
++	int fd, i, j, m, n, op, off, arg, c, d, ro=0;
+ 	struct slice all;
+ 	struct pt *ptp;
+ 	enum action what = LIST;
+@@ -233,6 +234,9 @@ main(int argc, char **argv){
+ 	}
+ 
+ 	while ((arg = getopt(argc, argv, short_opts)) != EOF) switch(arg) {
++		case 'r':
++			ro=1;
++			break;
+ 		case 'g':
+ 			force_gpt=1;
+ 			break;
+@@ -470,7 +474,7 @@ main(int argc, char **argv){
+ 					DM_DEVICE_RELOAD : DM_DEVICE_CREATE);
+ 
+ 				if (!dm_addmap(op, partname, DM_TARGET, params,
+-					       slices[j].size, uuid, j+1,
++					       slices[j].size, ro, uuid, j+1,
+ 					       buf.st_mode & 0777, buf.st_uid,
+ 					       buf.st_gid, &cookie)) {
+ 					fprintf(stderr, "create/reload failed on %s\n",
+@@ -536,7 +540,7 @@ main(int argc, char **argv){
+ 					      DM_DEVICE_RELOAD : DM_DEVICE_CREATE);
+ 
+ 					dm_addmap(op, partname, DM_TARGET, params,
+-						  slices[j].size, uuid, j+1,
++						  slices[j].size, ro, uuid, j+1,
+ 						  buf.st_mode & 0777,
+ 						  buf.st_uid, buf.st_gid,
+ 						  &cookie);
+diff --git a/libmultipath/Makefile b/libmultipath/Makefile
+index 203833d..c07b073 100644
+--- a/libmultipath/Makefile
++++ b/libmultipath/Makefile
+@@ -26,7 +26,7 @@ endif
+ all: $(LIBS)
+ 
+ $(LIBS): $(OBJS)
+-	$(CC) $(SHARED_FLAGS) $(LIBDEPS) -Wl,-soname=$@ $(CFLAGS) -o $@ $(OBJS)
++	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -Wl,-soname=$@ $(CFLAGS) -o $@ $(OBJS) $(LIBDEPS)
+ 	ln -sf $@ $(DEVLIB)
+ 
+ install:
 diff --git a/libmultipath/alias.c b/libmultipath/alias.c
 index 95506b4..4159ec6 100644
 --- a/libmultipath/alias.c
@@ -134,11 +241,253 @@ index fe1191b..c489a86 100644
 +char *get_user_friendly_alias(char *wwid, char *file, char *prefix,
 +			      int bindings_readonly);
  char *get_user_friendly_wwid(char *alias, char *file);
+diff --git a/libmultipath/checkers.h b/libmultipath/checkers.h
+index 6ba0339..272cd8f 100644
+--- a/libmultipath/checkers.h
++++ b/libmultipath/checkers.h
+@@ -68,20 +68,6 @@ enum path_check_state {
+ 
+ #define DEFAULT_CHECKER DIRECTIO
+ 
+-/*
+- * Overloaded storage response time can be very long.
+- * SG_IO timouts after DEF_TIMEOUT milliseconds, and checkers interprets this
+- * as a path failure. multipathd then proactively evicts the path from the DM
+- * multipath table in this case.
+- *
+- * This generaly snow balls and ends up in full eviction and IO errors for end
+- * users. Bad. This may also cause SCSI bus resets, causing disruption for all
+- * local and external storage hardware users.
+- * 
+- * Provision a long timeout. Longer than any real-world application would cope
+- * with.
+- */
+-#define DEF_TIMEOUT		300000
+ #define ASYNC_TIMEOUT_SEC	30
+ 
+ /*
+@@ -96,6 +82,7 @@ struct checker {
+ 	struct list_head node;
+ 	int fd;
+ 	int sync;
++	unsigned int timeout;
+ 	int disable;
+ 	char name[CHECKER_NAME_LEN];
+ 	char message[CHECKER_MSG_LEN];       /* comm with callers */
+diff --git a/libmultipath/checkers/Makefile b/libmultipath/checkers/Makefile
+index 92a9382..4b1a108 100644
+--- a/libmultipath/checkers/Makefile
++++ b/libmultipath/checkers/Makefile
+@@ -18,10 +18,10 @@ CFLAGS += -I..
+ all: $(LIBS)
+ 
+ libcheckdirectio.so: libsg.o directio.o
+-	$(CC) $(SHARED_FLAGS) -o $@ $^ -laio
++	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -o $@ $^ -laio
+ 
+ libcheck%.so: libsg.o %.o
+-	$(CC) $(SHARED_FLAGS) -o $@ $^
++	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -o $@ $^
+ 
+ install:
+ 	$(INSTALL_PROGRAM) -m 755 $(LIBS) $(DESTDIR)$(libdir)
+diff --git a/libmultipath/checkers/emc_clariion.c b/libmultipath/checkers/emc_clariion.c
+index 3a88b0b..fa04468 100644
+--- a/libmultipath/checkers/emc_clariion.c
++++ b/libmultipath/checkers/emc_clariion.c
+@@ -113,7 +113,7 @@ int libcheck_check (struct checker * c)
+ 	io_hdr.dxferp = sense_buffer;
+ 	io_hdr.cmdp = inqCmdBlk;
+ 	io_hdr.sbp = sb;
+-	io_hdr.timeout = DEF_TIMEOUT;
++	io_hdr.timeout = c->timeout;
+ 	io_hdr.pack_id = 0;
+ 	if (ioctl(c->fd, SG_IO, &io_hdr) < 0) {
+ 		MSG(c, "emc_clariion_checker: sending query command failed");
+@@ -182,7 +182,7 @@ int libcheck_check (struct checker * c)
+ 		unsigned char buf[4096];
+ 
+ 		memset(buf, 0, 4096);
+-		ret = sg_read(c->fd, &buf[0], sbb = &sb[0]);
++		ret = sg_read(c->fd, &buf[0], sbb = &sb[0], c->timeout);
+ 		if (ret == PATH_DOWN) {
+ 			hexadecimal_to_ascii(ct->wwn, wwnstr);
+ 
+diff --git a/libmultipath/checkers/hp_sw.c b/libmultipath/checkers/hp_sw.c
+index 3f28d85..b50ac0c 100644
+--- a/libmultipath/checkers/hp_sw.c
++++ b/libmultipath/checkers/hp_sw.c
+@@ -46,7 +46,7 @@ void libcheck_free (struct checker * c)
+ 
+ static int
+ do_inq(int sg_fd, int cmddt, int evpd, unsigned int pg_op,
+-       void *resp, int mx_resp_len, int noisy)
++       void *resp, int mx_resp_len, int noisy, unsigned int timeout)
+ {
+ 	unsigned char inqCmdBlk[INQUIRY_CMDLEN] =
+ 		{ INQUIRY_CMD, 0, 0, 0, 0, 0 };
+@@ -70,7 +70,7 @@ do_inq(int sg_fd, int cmddt, int evpd, unsigned int pg_op,
+ 	io_hdr.dxferp = resp;
+ 	io_hdr.cmdp = inqCmdBlk;
+ 	io_hdr.sbp = sense_b;
+-	io_hdr.timeout = DEF_TIMEOUT;
++	io_hdr.timeout = timeout;
+ 
+ 	if (ioctl(sg_fd, SG_IO, &io_hdr) < 0)
+ 		return 1;
+@@ -98,7 +98,7 @@ do_inq(int sg_fd, int cmddt, int evpd, unsigned int pg_op,
+ }
+ 
+ static int
+-do_tur (int fd)
++do_tur (int fd, unsigned int timeout)
+ {
+ 	unsigned char turCmdBlk[TUR_CMD_LEN] = { 0x00, 0, 0, 0, 0, 0 };
+ 	struct sg_io_hdr io_hdr;
+@@ -111,7 +111,7 @@ do_tur (int fd)
+ 	io_hdr.dxfer_direction = SG_DXFER_NONE;
+ 	io_hdr.cmdp = turCmdBlk;
+ 	io_hdr.sbp = sense_buffer;
+-	io_hdr.timeout = DEF_TIMEOUT;
++	io_hdr.timeout = timeout;
+ 	io_hdr.pack_id = 0;
+ 
+ 	if (ioctl(fd, SG_IO, &io_hdr) < 0)
+@@ -128,12 +128,12 @@ libcheck_check (struct checker * c)
+ {
+ 	char buff[MX_ALLOC_LEN];
+ 
+-	if (0 != do_inq(c->fd, 0, 1, 0x80, buff, MX_ALLOC_LEN, 0)) {
++	if (0 != do_inq(c->fd, 0, 1, 0x80, buff, MX_ALLOC_LEN, 0, c->timeout)) {
+ 		MSG(c, MSG_HP_SW_DOWN);
+ 		return PATH_DOWN;
+ 	}
+ 
+-	if (do_tur(c->fd)) {
++	if (do_tur(c->fd, c->timeout)) {
+ 		MSG(c, MSG_HP_SW_GHOST);
+ 		return PATH_GHOST;
+ 	}
+diff --git a/libmultipath/checkers/libsg.c b/libmultipath/checkers/libsg.c
+index 4cb7ecc..2f6af75 100644
+--- a/libmultipath/checkers/libsg.c
++++ b/libmultipath/checkers/libsg.c
+@@ -11,7 +11,8 @@
+ #include "../libmultipath/sg_include.h"
+ 
+ int
+-sg_read (int sg_fd, unsigned char * buff, unsigned char * senseBuff)
++sg_read (int sg_fd, unsigned char * buff, unsigned char * senseBuff,
++	 unsigned int timeout)
+ {
+ 	/* defaults */
+ 	int blocks = 1;
+@@ -51,7 +52,7 @@ sg_read (int sg_fd, unsigned char * buff, unsigned char * senseBuff)
+ 	io_hdr.dxferp = buff;
+ 	io_hdr.mx_sb_len = SENSE_BUFF_LEN;
+ 	io_hdr.sbp = senseBuff;
+-	io_hdr.timeout = DEF_TIMEOUT;
++	io_hdr.timeout = timeout;
+ 	io_hdr.pack_id = (int)start_block;
+ 	if (diop && *diop)
+ 	io_hdr.flags |= SG_FLAG_DIRECT_IO;
+diff --git a/libmultipath/checkers/libsg.h b/libmultipath/checkers/libsg.h
+index 97c4491..071bc61 100644
+--- a/libmultipath/checkers/libsg.h
++++ b/libmultipath/checkers/libsg.h
+@@ -3,6 +3,7 @@
+ 
+ #define SENSE_BUFF_LEN 32
+ 
+-int sg_read (int sg_fd, unsigned char * buff, unsigned char * senseBuff);
++int sg_read (int sg_fd, unsigned char * buff, unsigned char * senseBuff,
++	     unsigned int timeout);
+ 
+ #endif /* _LIBSG_H */
+diff --git a/libmultipath/checkers/rdac.c b/libmultipath/checkers/rdac.c
+index d12eed1..fb39155 100644
+--- a/libmultipath/checkers/rdac.c
++++ b/libmultipath/checkers/rdac.c
+@@ -18,7 +18,6 @@
+ #define INQUIRY_CMDLEN		6
+ #define INQUIRY_CMD		0x12
+ #define SENSE_BUFF_LEN		32
+-#define RDAC_DEF_TIMEOUT	60000
+ #define SCSI_CHECK_CONDITION	0x2
+ #define SCSI_COMMAND_TERMINATED	0x22
+ #define SG_ERR_DRIVER_SENSE	0x08
+@@ -43,7 +42,8 @@ void libcheck_free (struct checker * c)
+ }
+ 
+ static int
+-do_inq(int sg_fd, unsigned int pg_op, void *resp, int mx_resp_len)
++do_inq(int sg_fd, unsigned int pg_op, void *resp, int mx_resp_len,
++       unsigned int timeout)
+ {
+ 	unsigned char inqCmdBlk[INQUIRY_CMDLEN] = { INQUIRY_CMD, 1, 0, 0, 0, 0 };
+ 	unsigned char sense_b[SENSE_BUFF_LEN];
+@@ -62,7 +62,7 @@ do_inq(int sg_fd, unsigned int pg_op, void *resp, int mx_resp_len)
+ 	io_hdr.dxferp = resp;
+ 	io_hdr.cmdp = inqCmdBlk;
+ 	io_hdr.sbp = sense_b;
+-	io_hdr.timeout = RDAC_DEF_TIMEOUT;
++	io_hdr.timeout = timeout;
+ 
+ 	if (ioctl(sg_fd, SG_IO, &io_hdr) < 0)
+ 		return 1;
+@@ -104,10 +104,11 @@ libcheck_check (struct checker * c)
+ 	int ret;
+ 
+ 	memset(&inq, 0, sizeof(struct volume_access_inq));
+-	if (0 != do_inq(c->fd, 0xC9, &inq, sizeof(struct volume_access_inq))) {
++	if (0 != do_inq(c->fd, 0xC9, &inq, sizeof(struct volume_access_inq),
++			c->timeout)) {
+ 		ret = PATH_DOWN;
+ 		goto done;
+-	} else if ((inq.PQ_PDT & 0x20) || (inq.PQ_PDT & 0x7f)) {
++        } else if (((inq.PQ_PDT & 0xE0) == 0x20) || (inq.PQ_PDT & 0x7f)) {
+ 		/* LUN not connected*/
+ 		ret = PATH_DOWN;
+ 		goto done;
+diff --git a/libmultipath/checkers/readsector0.c b/libmultipath/checkers/readsector0.c
+index 24182e6..3647dd9 100644
+--- a/libmultipath/checkers/readsector0.c
++++ b/libmultipath/checkers/readsector0.c
+@@ -29,7 +29,7 @@ int libcheck_check (struct checker * c)
+ 	unsigned char sbuf[SENSE_BUFF_LEN];
+ 	int ret;
+ 
+-	ret = sg_read(c->fd, &buf[0], &sbuf[0]);
++	ret = sg_read(c->fd, &buf[0], &sbuf[0], c->timeout);
+ 
+ 	switch (ret)
+ 	{
+diff --git a/libmultipath/checkers/tur.c b/libmultipath/checkers/tur.c
+index 47107a2..55fab26 100644
+--- a/libmultipath/checkers/tur.c
++++ b/libmultipath/checkers/tur.c
+@@ -55,7 +55,7 @@ libcheck_check (struct checker * c)
+ 	io_hdr.dxfer_direction = SG_DXFER_NONE;
+ 	io_hdr.cmdp = turCmdBlk;
+ 	io_hdr.sbp = sense_buffer;
+-	io_hdr.timeout = DEF_TIMEOUT;
++	io_hdr.timeout = c->timeout;
+ 	io_hdr.pack_id = 0;
+ 	if (ioctl(c->fd, SG_IO, &io_hdr) < 0) {
+ 		MSG(c, MSG_TUR_DOWN);
 diff --git a/libmultipath/config.c b/libmultipath/config.c
-index a4178be..00acf96 100644
+index a4178be..f8ba4aa 100644
 --- a/libmultipath/config.c
 +++ b/libmultipath/config.c
-@@ -158,6 +158,9 @@ free_hwe (struct hwentry * hwe)
+@@ -19,6 +19,7 @@
+ #include "blacklist.h"
+ #include "defaults.h"
+ #include "prio.h"
++#include "devmapper.h"
+ 
+ static int
+ hwe_strmatch (struct hwentry *hwe1, struct hwentry *hwe2)
+@@ -158,6 +159,9 @@ free_hwe (struct hwentry * hwe)
  	if (hwe->prio_args)
  		FREE(hwe->prio_args);
  
@@ -148,7 +497,7 @@ index a4178be..00acf96 100644
  	if (hwe->bl_product)
  		FREE(hwe->bl_product);
  
-@@ -282,6 +285,7 @@ merge_hwe (struct hwentry * hwe1, struct hwentry * hwe2)
+@@ -282,12 +286,14 @@ merge_hwe (struct hwentry * hwe1, struct hwentry * hwe2)
  	merge_str(checker_name);
  	merge_str(prio_name);
  	merge_str(prio_args);
@@ -156,7 +505,14 @@ index a4178be..00acf96 100644
  	merge_str(bl_product);
  	merge_num(pgpolicy);
  	merge_num(pgfailback);
-@@ -333,6 +337,9 @@ store_hwe (vector hwtable, struct hwentry * dhwe)
+ 	merge_num(rr_weight);
+ 	merge_num(no_path_retry);
+ 	merge_num(minio);
++	merge_num(minio_rq);
+ 
+ 	return 0;
+ }
+@@ -333,11 +339,15 @@ store_hwe (vector hwtable, struct hwentry * dhwe)
  	if (dhwe->prio_args && !(hwe->prio_args = set_param_str(dhwe->prio_args)))
  		goto out;
  
@@ -166,7 +522,13 @@ index a4178be..00acf96 100644
  	hwe->pgpolicy = dhwe->pgpolicy;
  	hwe->pgfailback = dhwe->pgfailback;
  	hwe->rr_weight = dhwe->rr_weight;
-@@ -409,6 +416,9 @@ free_config (struct config * conf)
+ 	hwe->no_path_retry = dhwe->no_path_retry;
+ 	hwe->minio = dhwe->minio;
++	hwe->minio_rq = dhwe->minio_rq;
+ 
+ 	if (dhwe->bl_product && !(hwe->bl_product = set_param_str(dhwe->bl_product)))
+ 		goto out;
+@@ -409,6 +419,9 @@ free_config (struct config * conf)
  	if (conf->prio_name)
  		FREE(conf->prio_name);
  
@@ -176,8 +538,15 @@ index a4178be..00acf96 100644
  	if (conf->prio_args)
  		FREE(conf->prio_args);
  
-@@ -448,6 +458,7 @@ load_config (char * file)
- 	conf->minio = 1000;
+@@ -444,10 +457,13 @@ load_config (char * file)
+ 	if (!conf->verbosity)
+ 		conf->verbosity = DEFAULT_VERBOSITY;
+ 
++	conf->dmrq = dm_drv_get_rq();
+ 	conf->dev_type = DEV_NONE;
+-	conf->minio = 1000;
++	conf->minio = DEFAULT_MINIO;
++	conf->minio_rq = DEFAULT_MINIO_RQ;
  	conf->max_fds = 0;
  	conf->bindings_file = DEFAULT_BINDINGS_FILE;
 +	conf->bindings_read_only = 0;
@@ -185,10 +554,10 @@ index a4178be..00acf96 100644
  	conf->flush_on_last_del = 0;
  	conf->attribute_flags = 0;
 diff --git a/libmultipath/config.h b/libmultipath/config.h
-index 471eed0..5a5f81b 100644
+index 471eed0..46cd32a 100644
 --- a/libmultipath/config.h
 +++ b/libmultipath/config.h
-@@ -25,6 +25,7 @@ struct hwentry {
+@@ -25,12 +25,14 @@ struct hwentry {
  	char * checker_name;
  	char * prio_name;
  	char * prio_args;
@@ -196,7 +565,38 @@ index 471eed0..5a5f81b 100644
  
  	int pgpolicy;
  	int pgfailback;
-@@ -73,6 +74,7 @@ struct config {
+ 	int rr_weight;
+ 	int no_path_retry;
+ 	int minio;
++	int minio_rq;
+ 	int pg_timeout;
+ 	int flush_on_last_del;
+ 	int fast_io_fail;
+@@ -49,6 +51,7 @@ struct mpentry {
+ 	int rr_weight;
+ 	int no_path_retry;
+ 	int minio;
++	int minio_rq;
+ 	int pg_timeout;
+ 	int flush_on_last_del;
+ 	int attribute_flags;
+@@ -58,6 +61,7 @@ struct mpentry {
+ };
+ 
+ struct config {
++	int dmrq;
+ 	int verbosity;
+ 	int dry_run;
+ 	int list;
+@@ -66,6 +70,7 @@ struct config {
+ 	int pgpolicy;
+ 	enum devtypes dev_type;
+ 	int minio;
++	int minio_rq;
+ 	int checkint;
+ 	int max_checkint;
+ 	int pgfailback;
+@@ -73,10 +78,12 @@ struct config {
  	int rr_weight;
  	int no_path_retry;
  	int user_friendly_names;
@@ -204,7 +604,12 @@ index 471eed0..5a5f81b 100644
  	int pg_timeout;
  	int max_fds;
  	int force_reload;
-@@ -99,6 +101,7 @@ struct config {
+ 	int queue_without_daemon;
++	int checker_timeout;
+ 	int daemon;
+ 	int flush_on_last_del;
+ 	int attribute_flags;
+@@ -99,6 +106,7 @@ struct config {
  	char * prio_name;
  	char * prio_args;
  	char * checker_name;
@@ -213,9 +618,18 @@ index 471eed0..5a5f81b 100644
  	vector keywords;
  	vector mptable;
 diff --git a/libmultipath/configure.c b/libmultipath/configure.c
-index c6ca4b6..a40bef3 100644
+index c6ca4b6..18e97f2 100644
 --- a/libmultipath/configure.c
 +++ b/libmultipath/configure.c
+@@ -170,7 +170,7 @@ select_action (struct multipath * mpp, vector curmp, int force_reload)
+ 	if (!find_mp_by_wwid(curmp, mpp->wwid)) {
+ 		condlog(2, "%s: remove (wwid changed)", cmpp->alias);
+ 		dm_flush_map(mpp->alias);
+-		strncat(cmpp->wwid, mpp->wwid, WWID_SIZE);
++		strncpy(cmpp->wwid, mpp->wwid, WWID_SIZE);
+ 		drop_multipath(curmp, cmpp->wwid, KEEP_PATHS);
+ 		mpp->action = ACT_CREATE;
+ 		condlog(3, "%s: set ACT_CREATE (map wwid change)",
 @@ -284,6 +284,7 @@ lock_multipath (struct multipath * mpp, int lock)
  	struct pathgroup * pgp;
  	struct path * pp;
@@ -251,7 +665,38 @@ index c6ca4b6..a40bef3 100644
  }
  
  /*
-@@ -577,11 +591,11 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid, int force_r
+@@ -407,6 +421,7 @@ domap (struct multipath * mpp)
+ 			if (mpp->action != ACT_CREATE)
+ 				mpp->action = ACT_NOTHING;
+ 		}
++		dm_setgeometry(mpp);
+ 		return DOMAP_OK;
+ 	}
+ 	return DOMAP_FAIL;
+@@ -458,16 +473,20 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid, int force_r
+ 
+ 		/* 1. if path has no unique id or wwid blacklisted */
+ 		if (memcmp(empty_buff, pp1->wwid, WWID_SIZE) == 0 ||
+-		    filter_path(conf, pp1) > 0)
++		    filter_path(conf, pp1) > 0) {
++			orphan_path(pp1);
+ 			continue;
++		}
+ 
+ 		/* 2. if path already coalesced */
+ 		if (pp1->mpp)
+ 			continue;
+ 
+ 		/* 3. if path has disappeared */
+-		if (!pp1->size)
++		if (!pp1->size) {
++			orphan_path(pp1);
+ 			continue;
++		}
+ 
+ 		/* 4. path is out of scope */
+ 		if (refwwid && strncmp(pp1->wwid, refwwid, WWID_SIZE))
+@@ -577,11 +596,11 @@ coalesce_paths (struct vectors * vecs, vector newmp, char * refwwid, int force_r
  
  			remove_map(mpp, vecs, 0);
  
@@ -267,10 +712,10 @@ index c6ca4b6..a40bef3 100644
  	}
  	return 0;
 diff --git a/libmultipath/defaults.h b/libmultipath/defaults.h
-index 5a38d25..77526dd 100644
+index 5a38d25..aa5d538 100644
 --- a/libmultipath/defaults.h
 +++ b/libmultipath/defaults.h
-@@ -2,6 +2,7 @@
+@@ -2,9 +2,11 @@
  #define DEFAULT_UDEVDIR		"/dev"
  #define DEFAULT_MULTIPATHDIR	"/" LIB_STRING "/multipath"
  #define DEFAULT_SELECTOR	"round-robin 0"
@@ -278,11 +723,145 @@ index 5a38d25..77526dd 100644
  #define DEFAULT_FEATURES	"0"
  #define DEFAULT_HWHANDLER	"0"
  #define DEFAULT_MINIO		1000
++#define DEFAULT_MINIO_RQ	1
+ #define DEFAULT_PGPOLICY       FAILOVER
+ #define DEFAULT_FAILBACK       -FAILBACK_MANUAL
+ #define DEFAULT_RR_WEIGHT      RR_WEIGHT_NONE
 diff --git a/libmultipath/devmapper.c b/libmultipath/devmapper.c
-index 333659b..fb69ee8 100644
+index 333659b..50cdf98 100644
 --- a/libmultipath/devmapper.c
 +++ b/libmultipath/devmapper.c
-@@ -777,35 +777,49 @@ out:
+@@ -72,8 +72,14 @@ dm_init(void) {
+ 	dm_log_init_verbose(conf ? conf->verbosity + 3 : 0);
+ }
+ 
++#define VERSION_GE(v, minv) ( \
++ (v[0] > minv[0]) || \
++ ((v[0] == minv[0]) && (v[1] > minv[1])) || \
++ ((v[0] == minv[0]) && (v[1] == minv[1]) && (v[2] >= minv[2])) \
++)
++
+ static int
+-dm_libprereq (void)
++dm_lib_prereq (void)
+ {
+ 	char version[64];
+ 	int v[3];
+@@ -83,9 +89,7 @@ dm_libprereq (void)
+ 	condlog(3, "libdevmapper version %s", version);
+ 	sscanf(version, "%d.%d.%d ", &v[0], &v[1], &v[2]);
+ 
+-	if ((v[0] > minv[0]) ||
+-	    ((v[0] ==  minv[0]) && (v[1] > minv[1])) ||
+-	    ((v[0] == minv[0]) && (v[1] == minv[1]) && (v[2] >= minv[2])))
++	if VERSION_GE(v, minv)
+ 		return 0;
+ 	condlog(0, "libdevmapper version must be >= %d.%.2d.%.2d",
+ 		minv[0], minv[1], minv[2]);
+@@ -93,17 +97,16 @@ dm_libprereq (void)
+ }
+ 
+ static int
+-dm_drvprereq (char * str)
++dm_drv_version (unsigned int * version, char * str)
+ {
+ 	int r = 2;
+ 	struct dm_task *dmt;
+ 	struct dm_versions *target;
+ 	struct dm_versions *last_target;
+-	int minv[3] = {1, 0, 3};
+ 	unsigned int *v;
+ 
+ 	if (!(dmt = dm_task_create(DM_DEVICE_LIST_VERSIONS)))
+-		return 3;
++		return 1;
+ 
+ 	dm_task_no_open_count(dmt);
+ 
+@@ -123,29 +126,71 @@ dm_drvprereq (char * str)
+ 	} while (last_target != target);
+ 
+ 	if (r == 2) {
+-		condlog(0, "DM multipath kernel driver not loaded");
++		condlog(0, "DM %s kernel driver not loaded", str);
+ 		goto out;
+ 	}
+ 	v = target->version;
+-	if ((v[0] > minv[0]) ||
+-	    ((v[0] == minv[0]) && (v[1] > minv[1])) ||
+-	    ((v[0] == minv[0]) && (v[1] == minv[1]) && (v[2] >= minv[2]))) {
+-		r = 0;
+-		goto out;
+-	}
+-	condlog(0, "DM multipath kernel driver must be >= %u.%.2u.%.2u",
+-		minv[0], minv[1], minv[2]);
++        version[0] = v[0];
++        version[1] = v[1];
++        version[2] = v[2];
++	r = 0;
+ out:
+ 	dm_task_destroy(dmt);
+ 	return r;
+ }
+ 
++int
++dm_drv_get_rq (void)
++{
++	unsigned int minv_dmrq[3] = {1, 1, 0};
++	unsigned int version[3] = {0, 0, 0};
++        unsigned int * v = version;
++
++	if (dm_drv_version(v, TGT_MPATH)) {
++		/* in doubt return least capable */
++		return 0;
++	}
++
++	/* test request based multipath capability */
++	if VERSION_GE(v, minv_dmrq) {
++		condlog(3, "activate request-based multipathing mode "
++			   "(driver >= v%u.%u.%u)",
++			minv_dmrq[0], minv_dmrq[1], minv_dmrq[2]);
++		return 1;
++	}
++	return 0;
++}
++
++static int
++dm_drv_prereq (void)
++{
++	unsigned int minv[3] = {1, 0, 3};
++	unsigned int version[3] = {0, 0, 0};
++        unsigned int * v = version;
++
++	if (dm_drv_version(v, TGT_MPATH)) {
++		/* in doubt return not capable */
++		return 1;
++	}
++
++	/* test request based multipath capability */
++	condlog(3, "DM multipath kernel driver v%u.%u.%u",
++		v[0], v[1], v[2]);
++
++	if VERSION_GE(v, minv)
++		return 0;
++
++	condlog(0, "DM multipath kernel driver must be >= v%u.%u.%u",
++		minv[0], minv[1], minv[2]);
++	return 1;
++}
++
+ extern int
+ dm_prereq (void)
+ {
+-	if (dm_libprereq())
++	if (dm_lib_prereq())
+ 		return 1;
+-	return dm_drvprereq(TGT_MPATH);
++	return dm_drv_prereq();
+ }
+ 
+ static int
+@@ -777,35 +822,49 @@ out:
  	return r;
  }
  
@@ -355,20 +934,81 @@ index 333659b..fb69ee8 100644
  }
  
  int
+@@ -1119,3 +1178,51 @@ out:
+ 	dm_task_destroy(dmt);
+ 	return r;
+ }
++
++int dm_setgeometry(struct multipath *mpp)
++{
++	struct dm_task *dmt;
++	struct path *pp;
++	char heads[4], sectors[4];
++	char cylinders[10], start[32];
++	int r = 0;
++
++	if (!mpp)
++		return 1;
++
++	pp = first_path(mpp);
++	if (!pp) {
++		condlog(3, "%s: no path for geometry", mpp->alias);
++		return 1;
++	}
++	if (pp->geom.cylinders == 0 ||
++	    pp->geom.heads == 0 ||
++	    pp->geom.sectors == 0) {
++		condlog(3, "%s: invalid geometry on %s", mpp->alias, pp->dev);
++		return 1;
++	}
++
++	if (!(dmt = dm_task_create(DM_DEVICE_SET_GEOMETRY)))
++		return 0;
++
++	if (!dm_task_set_name(dmt, mpp->alias))
++		goto out;
++
++	dm_task_no_open_count(dmt);
++
++	/* What a sick interface ... */
++	snprintf(heads, 4, "%u", pp->geom.heads);
++	snprintf(sectors, 4, "%u", pp->geom.sectors);
++	snprintf(cylinders, 10, "%u", pp->geom.cylinders);
++	snprintf(start, 32, "%lu", pp->geom.start);
++	if (!dm_task_set_geometry(dmt, cylinders, heads, sectors, start)) {
++		condlog(3, "%s: Failed to set geometry", mpp->alias);
++		goto out;
++	}
++
++	r = dm_task_run(dmt);
++out:
++	dm_task_destroy(dmt);
++
++	return r;
++}
 diff --git a/libmultipath/devmapper.h b/libmultipath/devmapper.h
-index f3ffeaa..6c22bf3 100644
+index f3ffeaa..1322e22 100644
 --- a/libmultipath/devmapper.h
 +++ b/libmultipath/devmapper.h
-@@ -37,6 +37,6 @@ int dm_remove_partmaps (const char * mapname, int need_sync);
+@@ -8,6 +8,7 @@
+ 
+ void dm_init(void);
+ int dm_prereq (void);
++int dm_drv_get_rq (void);
+ int dm_simplecmd_flush (int, const char *, int);
+ int dm_simplecmd_noflush (int, const char *);
+ int dm_addmap_create (struct multipath *mpp);
+@@ -37,6 +38,7 @@ int dm_remove_partmaps (const char * mapname, int need_sync);
  int dm_get_uuid(char *name, char *uuid);
  int dm_get_info (char * mapname, struct dm_info ** dmi);
  int dm_rename (char * old, char * new);
 -int dm_get_name(char * uuid, char * name);
 +char * dm_get_name(char * uuid);
++int dm_setgeometry(struct multipath *mpp);
  
  #endif /* _DEVMAPPER_H */
 diff --git a/libmultipath/dict.c b/libmultipath/dict.c
-index 02aa238..964df9e 100644
+index 02aa238..b4d3103 100644
 --- a/libmultipath/dict.c
 +++ b/libmultipath/dict.c
 @@ -148,6 +148,17 @@ def_prio_handler(vector strvec)
@@ -389,7 +1029,90 @@ index 02aa238..964df9e 100644
  def_prio_args_handler(vector strvec)
  {
  	conf->prio_args = set_value(strvec);
-@@ -831,6 +842,22 @@ hw_prio_handler(vector strvec)
+@@ -197,6 +208,22 @@ def_minio_handler(vector strvec)
+ }
+ 
+ static int
++def_minio_rq_handler(vector strvec)
++{
++	char * buff;
++
++	buff = set_value(strvec);
++
++	if (!buff)
++		return 1;
++
++	conf->minio_rq = atoi(buff);
++	FREE(buff);
++
++	return 0;
++}
++
++static int
+ get_sys_max_fds(int *max_fds)
+ {
+ 	FILE *file;
+@@ -327,6 +354,10 @@ def_weight_handler(vector strvec)
+ 	    !strcmp(buff, "priorities"))
+ 		conf->rr_weight = RR_WEIGHT_PRIO;
+ 
++	if (strlen(buff) == strlen("uniform") &&
++	    !strcmp(buff, "uniform"))
++		conf->rr_weight = RR_WEIGHT_NONE;
++
+ 	FREE(buff);
+ 
+ 	return 0;
+@@ -395,6 +426,25 @@ def_queue_without_daemon(vector strvec)
+ }
+ 
+ static int
++def_checker_timeout_handler(vector strvec)
++{
++	unsigned int checker_timeout;
++	char *buff;
++
++	buff = set_value(strvec);
++	if (!buff)
++		return 1;
++
++	if (sscanf(buff, "%u", &checker_timeout) == 1)
++		conf->checker_timeout = checker_timeout;
++	else
++		conf->checker_timeout = 0;
++
++	free(buff);
++	return 0;
++}
++
++static int
+ def_pg_timeout_handler(vector strvec)
+ {
+ 	int pg_timeout;
+@@ -675,6 +725,22 @@ product_handler(vector strvec)
+ }
+ 
+ static int
++revision_handler(vector strvec)
++{
++	struct hwentry * hwe = VECTOR_LAST_SLOT(conf->hwtable);
++
++	if (!hwe)
++		return 1;
++
++	hwe->revision = set_value(strvec);
++
++	if (!hwe->revision)
++		return 1;
++
++	return 0;
++}
++
++static int
+ bl_product_handler(vector strvec)
+ {
+ 	struct hwentry * hwe = VECTOR_LAST_SLOT(conf->hwtable);
+@@ -831,6 +897,22 @@ hw_prio_handler(vector strvec)
  }
  
  static int
@@ -412,7 +1135,170 @@ index 02aa238..964df9e 100644
  hw_prio_args_handler(vector strvec)
  {
  	struct hwentry * hwe = VECTOR_LAST_SLOT(conf->hwtable);
-@@ -1580,6 +1607,19 @@ snprint_hw_prio (char * buff, int len, void * data)
+@@ -887,6 +969,10 @@ hw_weight_handler(vector strvec)
+ 	    !strcmp(buff, "priorities"))
+ 		hwe->rr_weight = RR_WEIGHT_PRIO;
+ 
++	if (strlen(buff) == strlen("uniform") &&
++	    !strcmp(buff, "uniform"))
++		hwe->rr_weight = RR_WEIGHT_NONE;
++
+ 	FREE(buff);
+ 
+ 	return 0;
+@@ -938,6 +1024,26 @@ hw_minio_handler(vector strvec)
+ }
+ 
+ static int
++hw_minio_rq_handler(vector strvec)
++{
++	struct hwentry *hwe = VECTOR_LAST_SLOT(conf->hwtable);
++	char * buff;
++
++	if (!hwe)
++		return 1;
++
++	buff = set_value(strvec);
++
++	if (!buff)
++		return 1;
++
++	hwe->minio_rq = atoi(buff);
++	FREE(buff);
++
++	return 0;
++}
++
++static int
+ hw_pg_timeout_handler(vector strvec)
+ {
+ 	int pg_timeout;
+@@ -1215,6 +1321,10 @@ mp_weight_handler(vector strvec)
+ 	    !strcmp(buff, "priorities"))
+ 		mpe->rr_weight = RR_WEIGHT_PRIO;
+ 
++	if (strlen(buff) == strlen("uniform") &&
++	    !strcmp(buff, "uniform"))
++		mpe->rr_weight = RR_WEIGHT_NONE;
++
+ 	FREE(buff);
+ 
+ 	return 0;
+@@ -1266,6 +1376,26 @@ mp_minio_handler(vector strvec)
+ }
+ 
+ static int
++mp_minio_rq_handler(vector strvec)
++{
++	struct mpentry *mpe = VECTOR_LAST_SLOT(conf->mptable);
++	char * buff;
++
++	if (!mpe)
++		return 1;
++
++	buff = set_value(strvec);
++
++	if (!buff)
++		return 1;
++
++	mpe->minio_rq = atoi(buff);
++	FREE(buff);
++
++	return 0;
++}
++
++static int
+ mp_pg_timeout_handler(vector strvec)
+ {
+ 	int pg_timeout;
+@@ -1339,11 +1469,6 @@ snprint_mp_alias (char * buff, int len, void * data)
+ 	if (!mpe->alias)
+ 		return 0;
+ 
+-	if (conf->user_friendly_names &&
+-	    (strlen(mpe->alias) == strlen("mpath")) &&
+-	    !strcmp(mpe->alias, "mpath"))
+-		return 0;
+-
+ 	return snprintf(buff, len, "%s", mpe->alias);
+ }
+ 
+@@ -1368,7 +1493,7 @@ snprint_mp_selector (char * buff, int len, void * data)
+ 	if (!mpe->selector)
+ 		return 0;
+ 
+-	return snprintf(buff, len, "%s", mpe->selector);
++	return snprintf(buff, len, "\"%s\"", mpe->selector);
+ }
+ 
+ static int
+@@ -1431,6 +1556,8 @@ snprint_mp_rr_weight (char * buff, int len, void * data)
+ 		return 0;
+ 	if (mpe->rr_weight == RR_WEIGHT_PRIO)
+ 		return snprintf(buff, len, "priorities");
++	if (mpe->rr_weight == RR_WEIGHT_NONE)
++		return snprintf(buff, len, "uniform");
+ 
+ 	return 0;
+ }
+@@ -1469,6 +1596,17 @@ snprint_mp_rr_min_io (char * buff, int len, void * data)
+ }
+ 
+ static int
++snprint_mp_rr_min_io_rq (char * buff, int len, void * data)
++{
++	struct mpentry * mpe = (struct mpentry *)data;
++
++	if (!mpe->minio_rq)
++		return 0;
++
++	return snprintf(buff, len, "%u", mpe->minio_rq);
++}
++
++static int
+ snprint_mp_pg_timeout (char * buff, int len, void * data)
+ {
+ 	struct mpentry * mpe = (struct mpentry *)data;
+@@ -1541,6 +1679,17 @@ snprint_hw_product (char * buff, int len, void * data)
+ }
+ 
+ static int
++snprint_hw_revision (char * buff, int len, void * data)
++{
++	struct hwentry * hwe = (struct hwentry *)data;
++
++	if (!hwe->revision)
++		return 0;
++
++	return snprintf(buff, len, "\"%s\"", hwe->revision);
++}
++
++static int
+ snprint_hw_bl_product (char * buff, int len, void * data)
+ {
+ 	struct hwentry * hwe = (struct hwentry *)data;
+@@ -1558,10 +1707,6 @@ snprint_hw_getuid_callout (char * buff, int len, void * data)
+ 
+ 	if (!hwe->getuid)
+ 		return 0;
+-	if (conf->getuid &&
+-	    strlen(hwe->getuid) == strlen(conf->getuid) &&
+-	    !strcmp(hwe->getuid, conf->getuid))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "\"%s\"", hwe->getuid);
+ }
+@@ -1571,25 +1716,32 @@ snprint_hw_prio (char * buff, int len, void * data)
+ {
+ 	struct hwentry * hwe = (struct hwentry *)data;
+ 
+-	if (!hwe->prio_name || (strlen(hwe->prio_name) == 0))
+-		return 0;
+-	if (conf->prio_name && !strcmp(hwe->prio_name, conf->prio_name))
++	if (!hwe->prio_name)
+ 		return 0;
+ 
+ 	return snprintf(buff, len, "%s", hwe->prio_name);
  }
  
  static int
@@ -420,44 +1306,434 @@ index 02aa238..964df9e 100644
 +{
 +	struct hwentry * hwe = (struct hwentry *)data;
 +
-+	if (!hwe->alias_prefix || (strlen(hwe->alias_prefix) == 0))
-+		return 0;
-+	if (conf->alias_prefix && !strcmp(hwe->alias_prefix, conf->alias_prefix))
++	if (!hwe->alias_prefix)
 +		return 0;
 +
-+	return snprintf(buff, len, "%s", hwe->alias_prefix);
++	return snprintf(buff, len, "\"%s\"", hwe->alias_prefix);
 +}
 +
 +static int
  snprint_hw_prio_args (char * buff, int len, void * data)
  {
  	struct hwentry * hwe = (struct hwentry *)data;
-@@ -2076,6 +2116,16 @@ snprint_def_user_friendly_names (char * buff, int len, void * data)
+ 
+-        if (!hwe->prio_args || (strlen(hwe->prio_args) == 0))
+-                return 0;
+-        if (conf->prio_args && !strcmp(hwe->prio_args, conf->prio_args))
++        if (!hwe->prio_args)
+                 return 0;
+ 
+-	return snprintf(buff, len, "%s", hwe->prio_args);
++	return snprintf(buff, len, "\"%s\"", hwe->prio_args);
+ }
+ 
+ static int
+@@ -1599,10 +1751,6 @@ snprint_hw_features (char * buff, int len, void * data)
+ 
+ 	if (!hwe->features)
+ 		return 0;
+-	if (conf->features &&
+-	    strlen(hwe->features) == strlen(conf->features) &&
+-	    !strcmp(hwe->features, conf->features))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "\"%s\"", hwe->features);
+ }
+@@ -1614,10 +1762,6 @@ snprint_hw_hardware_handler (char * buff, int len, void * data)
+ 
+ 	if (!hwe->hwhandler)
+ 		return 0;
+-	if (conf->hwhandler &&
+-	    strlen(hwe->hwhandler) == strlen(conf->hwhandler) &&
+-	    !strcmp(hwe->hwhandler, conf->hwhandler))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "\"%s\"", hwe->hwhandler);
+ }
+@@ -1629,12 +1773,8 @@ snprint_hw_selector (char * buff, int len, void * data)
+ 
+ 	if (!hwe->selector)
+ 		return 0;
+-	if (conf->selector &&
+-	    strlen(hwe->selector) == strlen(conf->selector) &&
+-	    !strcmp(hwe->selector, conf->selector))
+-		return 0;
+ 
+-	return snprintf(buff, len, "%s", hwe->selector);
++	return snprintf(buff, len, "\"%s\"", hwe->selector);
+ }
+ 
+ static int
+@@ -1646,8 +1786,6 @@ snprint_hw_path_grouping_policy (char * buff, int len, void * data)
+ 
+ 	if (!hwe->pgpolicy)
+ 		return 0;
+-	if (conf->pgpolicy && hwe->pgpolicy == conf->pgpolicy)
+-		return 0;
+ 
+ 	get_pgpolicy_name(str, POLICY_NAME_SIZE, hwe->pgpolicy);
+ 
+@@ -1661,8 +1799,6 @@ snprint_hw_failback (char * buff, int len, void * data)
+ 
+ 	if (!hwe->pgfailback)
+ 		return 0;
+-	if (conf->pgfailback && hwe->pgfailback == conf->pgfailback)
+-		return 0;
+ 
+ 	switch(hwe->pgfailback) {
+ 	case  FAILBACK_UNDEF:
+@@ -1684,10 +1820,10 @@ snprint_hw_rr_weight (char * buff, int len, void * data)
+ 
+ 	if (!hwe->rr_weight)
+ 		return 0;
+-	if (conf->rr_weight && hwe->rr_weight == conf->rr_weight)
+-		return 0;
+ 	if (hwe->rr_weight == RR_WEIGHT_PRIO)
+ 		return snprintf(buff, len, "priorities");
++	if (hwe->rr_weight == RR_WEIGHT_NONE)
++		return snprintf(buff, len, "uniform");
+ 
+ 	return 0;
+ }
+@@ -1699,8 +1835,6 @@ snprint_hw_no_path_retry (char * buff, int len, void * data)
+ 
+ 	if (!hwe->no_path_retry)
+ 		return 0;
+-	if (hwe->no_path_retry == conf->no_path_retry)
+-		return 0;
+ 
+ 	switch(hwe->no_path_retry) {
+ 	case NO_PATH_RETRY_UNDEF:
+@@ -1723,21 +1857,28 @@ snprint_hw_rr_min_io (char * buff, int len, void * data)
+ 
+ 	if (!hwe->minio)
+ 		return 0;
+-	if (hwe->minio == conf->minio)
+-		return 0;
+ 
+ 	return snprintf(buff, len, "%u", hwe->minio);
+ }
+ 
+ static int
++snprint_hw_rr_min_io_rq (char * buff, int len, void * data)
++{
++	struct hwentry * hwe = (struct hwentry *)data;
++
++	if (!hwe->minio_rq)
++		return 0;
++
++	return snprintf(buff, len, "%u", hwe->minio_rq);
++}
++
++static int
+ snprint_hw_pg_timeout (char * buff, int len, void * data)
+ {
+ 	struct hwentry * hwe = (struct hwentry *)data;
+ 
+ 	if (!hwe->pg_timeout)
+ 		return 0;
+-	if (hwe->pg_timeout == conf->pg_timeout)
+-		return 0;
+ 
+ 	switch (hwe->pg_timeout) {
+ 	case PGTIMEOUT_UNDEF:
+@@ -1771,9 +1912,6 @@ snprint_hw_path_checker (char * buff, int len, void * data)
+ 
+ 	if (!hwe->checker_name)
+ 		return 0;
+-	if (conf->checker_name &&
+-	    !strcmp(hwe->checker_name, conf->checker_name))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "%s", hwe->checker_name);
+ }
+@@ -1781,8 +1919,6 @@ snprint_hw_path_checker (char * buff, int len, void * data)
+ static int
+ snprint_def_polling_interval (char * buff, int len, void * data)
+ {
+-	if (conf->checkint == DEFAULT_CHECKINT)
+-		return 0;
+ 	return snprintf(buff, len, "%i", conf->checkint);
+ }
+ 
+@@ -1807,8 +1943,6 @@ snprint_def_dev_loss(char * buff, int len, void * data)
+ static int
+ snprint_def_verbosity (char * buff, int len, void * data)
+ {
+-	if (conf->checkint == DEFAULT_VERBOSITY)
+-		return 0;
+ 	return snprintf(buff, len, "%i", conf->verbosity);
+ }
+ 
+@@ -1817,9 +1951,6 @@ snprint_def_udev_dir (char * buff, int len, void * data)
+ {
+ 	if (!conf->udev_dir)
+ 		return 0;
+-	if (strlen(DEFAULT_UDEVDIR) == strlen(conf->udev_dir) &&
+-	    !strcmp(conf->udev_dir, DEFAULT_UDEVDIR))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "\"%s\"", conf->udev_dir);
+ }
+@@ -1829,9 +1960,6 @@ snprint_def_multipath_dir (char * buff, int len, void * data)
+ {
+ 	if (!conf->udev_dir)
+ 		return 0;
+-	if (strlen(DEFAULT_MULTIPATHDIR) == strlen(conf->multipath_dir) &&
+-	    !strcmp(conf->multipath_dir, DEFAULT_MULTIPATHDIR))
+-		return 0;
+ 
+ 	return snprintf(buff, len, "\"%s\"", conf->multipath_dir);
+ }
+@@ -1840,25 +1968,21 @@ static int
+ snprint_def_selector (char * buff, int len, void * data)
+ {
+ 	if (!conf->selector)
+-		return 0;
+-	if (strlen(conf->selector) == strlen(DEFAULT_SELECTOR) &&
+-	    !strcmp(conf->selector, DEFAULT_SELECTOR))
+-		return 0;
++		return snprintf(buff, len, "\"%s\"", DEFAULT_SELECTOR);
+ 
+-	return snprintf(buff, len, "%s", conf->selector);
++	return snprintf(buff, len, "\"%s\"", conf->selector);
+ }
+ 
+ static int
+ snprint_def_path_grouping_policy (char * buff, int len, void * data)
+ {
+ 	char str[POLICY_NAME_SIZE];
++	int pgpolicy = conf->pgpolicy;
+ 
+-	if (!conf->pgpolicy)
+-		return 0;
+-	if (conf->pgpolicy == DEFAULT_PGPOLICY)
+-		return 0;
++	if (!pgpolicy)
++		pgpolicy = DEFAULT_PGPOLICY;
+ 
+-	get_pgpolicy_name(str, POLICY_NAME_SIZE, conf->pgpolicy);
++	get_pgpolicy_name(str, POLICY_NAME_SIZE, pgpolicy);
+ 
+ 	return snprintf(buff, len, "%s", str);
+ }
+@@ -1867,10 +1991,7 @@ static int
+ snprint_def_getuid_callout (char * buff, int len, void * data)
+ {
+ 	if (!conf->getuid)
+-		return 0;
+-	if (strlen(conf->getuid) == strlen(DEFAULT_GETUID) &&
+-	    !strcmp(conf->getuid, DEFAULT_GETUID))
+-		return 0;
++		return snprintf(buff, len, "\"%s\"", DEFAULT_GETUID);
+ 
+ 	return snprintf(buff, len, "\"%s\"", conf->getuid);
+ }
+@@ -1879,11 +2000,7 @@ static int
+ snprint_def_prio (char * buff, int len, void * data)
+ {
+ 	if (!conf->prio_name)
+-		return 0;
+-
+-	if (strlen(conf->prio_name) == strlen(DEFAULT_PRIO) &&
+-	    !strcmp(conf->prio_name, DEFAULT_PRIO))
+-		return 0;
++		return snprintf(buff, len, "%s", DEFAULT_PRIO);
+ 
+ 	return snprintf(buff, len, "%s", conf->prio_name);
+ }
+@@ -1892,23 +2009,16 @@ static int
+ snprint_def_prio_args (char * buff, int len, void * data)
+ {
+ 	if (!conf->prio_args)
+-		return 0;
+-
+-	if (strlen(conf->prio_args) == strlen(DEFAULT_PRIO_ARGS) &&
+-	    !strcmp(conf->prio_args, DEFAULT_PRIO_ARGS))
+-		return 0;
++		return snprintf(buff, len, "\"%s\"", DEFAULT_PRIO_ARGS);
+ 
+-	return snprintf(buff, len, "%s", conf->prio_args);
++	return snprintf(buff, len, "\"%s\"", conf->prio_args);
+ }
+ 
+ static int
+ snprint_def_features (char * buff, int len, void * data)
+ {
+ 	if (!conf->features)
+-		return 0;
+-	if (strlen(conf->features) == strlen(DEFAULT_FEATURES) &&
+-	    !strcmp(conf->features, DEFAULT_FEATURES))
+-		return 0;
++		return snprintf(buff, len, "\"%s\"", DEFAULT_FEATURES);
+ 
+ 	return snprintf(buff, len, "\"%s\"", conf->features);
+ }
+@@ -1917,10 +2027,7 @@ static int
+ snprint_def_path_checker (char * buff, int len, void * data)
+ {
+ 	if (!conf->checker_name)
+-		return 0;
+-	if (strlen(conf->checker_name) == strlen(DEFAULT_CHECKER) &&
+-	    !strcmp(conf->checker_name, DEFAULT_CHECKER))
+-		return 0;
++		return snprintf(buff, len, "%s", DEFAULT_CHECKER);
+ 
+ 	return snprintf(buff, len, "%s", conf->checker_name);
+ }
+@@ -1928,10 +2035,9 @@ snprint_def_path_checker (char * buff, int len, void * data)
+ static int
+ snprint_def_failback (char * buff, int len, void * data)
+ {
+-	if (!conf->pgfailback)
+-		return 0;
+-	if (conf->pgfailback == DEFAULT_FAILBACK)
+-		return 0;
++	int pgfailback = conf->pgfailback;
++	if (!pgfailback)
++		pgfailback = DEFAULT_FAILBACK;
+ 
+ 	switch(conf->pgfailback) {
+ 	case  FAILBACK_UNDEF:
+@@ -1951,13 +2057,20 @@ snprint_def_rr_min_io (char * buff, int len, void * data)
+ {
+ 	if (!conf->minio)
+ 		return 0;
+-	if (conf->minio == DEFAULT_MINIO)
+-		return 0;
+ 
+ 	return snprintf(buff, len, "%u", conf->minio);
+ }
+ 
+ static int
++snprint_def_rr_min_io_rq (char * buff, int len, void * data)
++{
++	if (!conf->minio_rq)
++		return 0;
++
++	return snprintf(buff, len, "%u", conf->minio_rq);
++}
++
++static int
+ snprint_max_fds (char * buff, int len, void * data)
+ {
+ 	if (!conf->max_fds)
+@@ -1993,10 +2106,8 @@ snprint_def_gid(char * buff, int len, void * data)
+ static int
+ snprint_def_rr_weight (char * buff, int len, void * data)
+ {
+-	if (!conf->rr_weight)
+-		return 0;
+-	if (conf->rr_weight == DEFAULT_RR_WEIGHT)
+-		return 0;
++	if (!conf->rr_weight || conf->rr_weight == RR_WEIGHT_NONE)
++		return snprintf(buff, len, "uniform");
+ 	if (conf->rr_weight == RR_WEIGHT_PRIO)
+ 		return snprintf(buff, len, "priorities");
+ 
+@@ -2006,9 +2117,6 @@ snprint_def_rr_weight (char * buff, int len, void * data)
+ static int
+ snprint_def_no_path_retry (char * buff, int len, void * data)
+ {
+-	if (conf->no_path_retry == DEFAULT_NO_PATH_RETRY)
+-		return 0;
+-
+ 	switch(conf->no_path_retry) {
+ 	case NO_PATH_RETRY_UNDEF:
+ 		break;
+@@ -2030,20 +2138,26 @@ snprint_def_queue_without_daemon (char * buff, int len, void * data)
+ 	case QUE_NO_DAEMON_OFF:
+ 		return snprintf(buff, len, "no");
+ 	case QUE_NO_DAEMON_ON:
++	case QUE_NO_DAEMON_UNDEF:
+ 		return snprintf(buff, len, "yes");
+ 	}
+ 	return 0;
+ }
+ 
+ static int
+-snprint_def_pg_timeout (char * buff, int len, void * data)
++snprint_def_checker_timeout (char *buff, int len, void *data)
+ {
+-	if (conf->pg_timeout == DEFAULT_PGTIMEOUT)
++	if (!conf->checker_timeout)
+ 		return 0;
+ 
++	return snprintf(buff, len, "%u", conf->checker_timeout);
++}
++
++static int
++snprint_def_pg_timeout (char * buff, int len, void * data)
++{
+ 	switch (conf->pg_timeout) {
+ 	case PGTIMEOUT_UNDEF:
+-		break;
+ 	case -PGTIMEOUT_NONE:
+ 		return snprintf(buff, len, "none");
+ 	default:
+@@ -2056,9 +2170,11 @@ static int
+ snprint_def_flush_on_last_del (char * buff, int len, void * data)
+ {
+ 	switch (conf->flush_on_last_del) {
++	case FLUSH_UNDEF:
+ 	case FLUSH_DISABLED:
+ 		return snprintf(buff, len, "no");
+ 	case FLUSH_ENABLED:
++	case FLUSH_IN_PROGRESS:
+ 		return snprintf(buff, len, "yes");
+ 	}
+ 	return 0;
+@@ -2067,8 +2183,6 @@ snprint_def_flush_on_last_del (char * buff, int len, void * data)
+ static int
+ snprint_def_user_friendly_names (char * buff, int len, void * data)
+ {
+-	if (conf->user_friendly_names == DEFAULT_USER_FRIENDLY_NAMES)
+-		return 0;
+ 	if (!conf->user_friendly_names)
+ 		return snprintf(buff, len, "no");
+ 
+@@ -2076,6 +2190,14 @@ snprint_def_user_friendly_names (char * buff, int len, void * data)
  }
  
  static int
 +snprint_def_alias_prefix (char * buff, int len, void * data)
 +{
 +	if (!conf->alias_prefix)
-+		return 0;
-+	if (!strcmp(conf->alias_prefix, DEFAULT_ALIAS_PREFIX))
-+		return 0;
-+	return snprintf(buff, len, conf->alias_prefix);
++		return snprintf(buff, len, "\"%s\"", DEFAULT_ALIAS_PREFIX);
++	return snprintf(buff, len, "\"%s\"", conf->alias_prefix);
 +}
 +
 +static int
  snprint_ble_simple (char * buff, int len, void * data)
  {
  	struct blentry * ble = (struct blentry *)data;
-@@ -2117,6 +2167,7 @@ init_keywords(void)
+@@ -2109,20 +2231,23 @@ init_keywords(void)
+ 	install_keyword("polling_interval", &polling_interval_handler, &snprint_def_polling_interval);
+ 	install_keyword("udev_dir", &udev_dir_handler, &snprint_def_udev_dir);
+ 	install_keyword("multipath_dir", &multipath_dir_handler, &snprint_def_multipath_dir);
+-	install_keyword("selector", &def_selector_handler, &snprint_def_selector);
++	install_keyword("path_selector", &def_selector_handler, &snprint_def_selector);
+ 	install_keyword("path_grouping_policy", &def_pgpolicy_handler, &snprint_def_path_grouping_policy);
+ 	install_keyword("getuid_callout", &def_getuid_callout_handler, &snprint_def_getuid_callout);
+ 	install_keyword("prio", &def_prio_handler, &snprint_def_prio);
+ 	install_keyword("prio_args", &def_prio_args_handler, &snprint_def_prio_args);
  	install_keyword("features", &def_features_handler, &snprint_def_features);
  	install_keyword("path_checker", &def_path_checker_handler, &snprint_def_path_checker);
- 	install_keyword("checker", &def_path_checker_handler, &snprint_def_path_checker);
+-	install_keyword("checker", &def_path_checker_handler, &snprint_def_path_checker);
++	install_keyword("checker", &def_path_checker_handler, NULL);
 +	install_keyword("alias_prefix", &def_alias_prefix_handler, &snprint_def_alias_prefix);
  	install_keyword("failback", &default_failback_handler, &snprint_def_failback);
  	install_keyword("rr_min_io", &def_minio_handler, &snprint_def_rr_min_io);
++	install_keyword("rr_min_io_rq", &def_minio_rq_handler, &snprint_def_rr_min_io_rq);
  	install_keyword("max_fds", &max_fds_handler, &snprint_max_fds);
-@@ -2138,17 +2189,17 @@ init_keywords(void)
+ 	install_keyword("rr_weight", &def_weight_handler, &snprint_def_rr_weight);
+ 	install_keyword("no_path_retry", &def_no_path_retry_handler, &snprint_def_no_path_retry);
+ 	install_keyword("queue_without_daemon", &def_queue_without_daemon, &snprint_def_queue_without_daemon);
++	install_keyword("checker_timeout", &def_checker_timeout_handler, &snprint_def_checker_timeout);
+ 	install_keyword("pg_timeout", &def_pg_timeout_handler, &snprint_def_pg_timeout);
+ 	install_keyword("flush_on_last_del", &def_flush_on_last_del_handler, &snprint_def_flush_on_last_del);
+ 	install_keyword("user_friendly_names", &names_handler, &snprint_def_user_friendly_names);
+@@ -2138,17 +2263,17 @@ init_keywords(void)
  	__deprecated install_keyword("default_path_checker", &def_path_checker_handler, NULL);
  
  	install_keyword_root("blacklist", &blacklist_handler);
@@ -481,7 +1757,7 @@ index 02aa238..964df9e 100644
  	install_sublevel();
  	install_keyword("vendor", &ble_except_vendor_handler, &snprint_bled_vendor);
  	install_keyword("product", &ble_except_product_handler, &snprint_bled_product);
-@@ -2166,7 +2217,7 @@ init_keywords(void)
+@@ -2166,16 +2291,18 @@ init_keywords(void)
  #endif
  
  	install_keyword_root("devices", &devices_handler);
@@ -490,15 +1766,27 @@ index 02aa238..964df9e 100644
  	install_sublevel();
  	install_keyword("vendor", &vendor_handler, &snprint_hw_vendor);
  	install_keyword("product", &product_handler, &snprint_hw_product);
-@@ -2176,6 +2227,7 @@ init_keywords(void)
++	install_keyword("revision", &revision_handler, &snprint_hw_revision);
+ 	install_keyword("product_blacklist", &bl_product_handler, &snprint_hw_bl_product);
+ 	install_keyword("path_grouping_policy", &hw_pgpolicy_handler, &snprint_hw_path_grouping_policy);
+ 	install_keyword("getuid_callout", &hw_getuid_callout_handler, &snprint_hw_getuid_callout);
  	install_keyword("path_selector", &hw_selector_handler, &snprint_hw_selector);
  	install_keyword("path_checker", &hw_path_checker_handler, &snprint_hw_path_checker);
- 	install_keyword("checker", &hw_path_checker_handler, &snprint_hw_path_checker);
+-	install_keyword("checker", &hw_path_checker_handler, &snprint_hw_path_checker);
++	install_keyword("checker", &hw_path_checker_handler, NULL);
 +	install_keyword("alias_prefix", &hw_alias_prefix_handler, &snprint_hw_alias_prefix);
  	install_keyword("features", &hw_features_handler, &snprint_hw_features);
  	install_keyword("hardware_handler", &hw_handler_handler, &snprint_hw_hardware_handler);
  	install_keyword("prio", &hw_prio_handler, &snprint_hw_prio);
-@@ -2191,7 +2243,7 @@ init_keywords(void)
+@@ -2184,6 +2311,7 @@ init_keywords(void)
+ 	install_keyword("rr_weight", &hw_weight_handler, &snprint_hw_rr_weight);
+ 	install_keyword("no_path_retry", &hw_no_path_retry_handler, &snprint_hw_no_path_retry);
+ 	install_keyword("rr_min_io", &hw_minio_handler, &snprint_hw_rr_min_io);
++	install_keyword("rr_min_io_rq", &hw_minio_rq_handler, &snprint_hw_rr_min_io_rq);
+ 	install_keyword("pg_timeout", &hw_pg_timeout_handler, &snprint_hw_pg_timeout);
+ 	install_keyword("flush_on_last_del", &hw_flush_on_last_del_handler, &snprint_hw_flush_on_last_del);
+ 	install_keyword("fast_io_fail_tmo", &hw_fast_io_fail_handler, &snprint_hw_fast_io_fail);
+@@ -2191,7 +2319,7 @@ init_keywords(void)
  	install_sublevel_end();
  
  	install_keyword_root("multipaths", &multipaths_handler);
@@ -507,8 +1795,16 @@ index 02aa238..964df9e 100644
  	install_sublevel();
  	install_keyword("wwid", &wwid_handler, &snprint_mp_wwid);
  	install_keyword("alias", &alias_handler, &snprint_mp_alias);
+@@ -2201,6 +2329,7 @@ init_keywords(void)
+ 	install_keyword("rr_weight", &mp_weight_handler, &snprint_mp_rr_weight);
+ 	install_keyword("no_path_retry", &mp_no_path_retry_handler, &snprint_mp_no_path_retry);
+ 	install_keyword("rr_min_io", &mp_minio_handler, &snprint_mp_rr_min_io);
++	install_keyword("rr_min_io_rq", &mp_minio_rq_handler, &snprint_mp_rr_min_io_rq);
+ 	install_keyword("pg_timeout", &mp_pg_timeout_handler, &snprint_mp_pg_timeout);
+ 	install_keyword("flush_on_last_del", &mp_flush_on_last_del_handler, &snprint_mp_flush_on_last_del);
+ 	install_keyword("mode", &mp_mode_handler, &snprint_mp_mode);
 diff --git a/libmultipath/discovery.c b/libmultipath/discovery.c
-index 122eb8f..c371b47 100644
+index 122eb8f..3b443e2 100644
 --- a/libmultipath/discovery.c
 +++ b/libmultipath/discovery.c
 @@ -10,6 +10,7 @@
@@ -519,7 +1815,39 @@ index 122eb8f..c371b47 100644
  
  #include "checkers.h"
  #include "vector.h"
-@@ -204,6 +205,41 @@ sysfs_get_fc_nodename (struct sysfs_device * dev, char * node,
+@@ -164,6 +165,31 @@ sysfs_get_dev (struct sysfs_device * dev, char * buff, size_t len)
+ }
+ 
+ int
++sysfs_get_timeout(struct sysfs_device *dev, unsigned int *timeout)
++{
++	char *attr;
++	char attr_path[SYSFS_PATH_SIZE];
++	int r;
++	unsigned int t;
++
++	if (safe_sprintf(attr_path, "%s/device", dev->devpath))
++		return 1;
++
++	attr = sysfs_attr_get_value(dev->devpath, "timeout");
++	if (!attr)
++		return 1;
++
++	r = sscanf(attr, "%u\n", &t);
++
++	if (r != 1)
++		return 1;
++
++	*timeout = t * 1000;
++
++	return 0;
++}
++
++int
+ sysfs_get_size (struct sysfs_device * dev, unsigned long long * size)
+ {
+ 	char *attr;
+@@ -204,6 +230,41 @@ sysfs_get_fc_nodename (struct sysfs_device * dev, char * node,
  	return 1;
  }
  
@@ -561,7 +1889,7 @@ index 122eb8f..c371b47 100644
  int
  sysfs_set_scsi_tmo (struct multipath *mpp)
  {
-@@ -211,15 +247,22 @@ sysfs_set_scsi_tmo (struct multipath *mpp)
+@@ -211,15 +272,22 @@ sysfs_set_scsi_tmo (struct multipath *mpp)
  	struct path *pp;
  	int i;
  	char value[11];
@@ -586,11 +1914,345 @@ index 122eb8f..c371b47 100644
  			return 1;
  		}
  		if (mpp->dev_loss){
+@@ -458,6 +526,23 @@ get_inq (char * dev, char * vendor, char * product, char * rev, int fd)
+ }
+ 
+ static int
++get_geometry(struct path *pp)
++{
++	if (pp->fd < 0)
++		return 1;
++
++	if (ioctl(pp->fd, HDIO_GETGEO, &pp->geom)) {
++		condlog(2, "%s: HDIO_GETGEO failed with %d", pp->dev, errno);
++		memset(&pp->geom, 0, sizeof(pp->geom));
++		return 1;
++	}
++	condlog(3, "%s: %u cyl, %u heads, %u sectors/track, start at %lu",
++		pp->dev, pp->geom.cylinders, pp->geom.heads,
++		pp->geom.sectors, pp->geom.start);
++	return 0;
++}
++
++static int
+ scsi_sysfs_pathinfo (struct path * pp, struct sysfs_device * parent)
+ {
+ 	char attr_path[FILE_NAME_SIZE];
+@@ -770,6 +855,8 @@ get_state (struct path * pp, int daemon)
+ 	}
+ 	if (daemon)
+ 		checker_set_async(c);
++	if (!conf->checker_timeout)
++		sysfs_get_timeout(pp->sysdev, &(c->timeout));
+ 	state = checker_check(c);
+ 	condlog(3, "%s: state = %i", pp->dev, state);
+ 	if (state == PATH_DOWN && strlen(checker_message(c)))
+@@ -852,6 +939,9 @@ pathinfo (struct path *pp, vector hwtable, int mask)
+ 		goto blank;
+ 	}
+ 
++	if (mask & DI_SERIAL)
++		get_geometry(pp);
++
+ 	if (pp->bus == SYSFS_BUS_SCSI &&
+ 	    scsi_ioctl_pathinfo(pp, mask))
+ 		goto blank;
+diff --git a/libmultipath/discovery.h b/libmultipath/discovery.h
+index ec3a358..c376702 100644
+--- a/libmultipath/discovery.h
++++ b/libmultipath/discovery.h
+@@ -35,6 +35,7 @@ int pathinfo (struct path *, vector hwtable, int mask);
+ struct path * store_pathinfo (vector pathvec, vector hwtable,
+ 			      char * devname, int flag);
+ int sysfs_set_scsi_tmo (struct multipath *mpp);
++int sysfs_get_timeout(struct sysfs_device *dev, unsigned int *timeout);
+ 
+ /*
+  * discovery bitmask
 diff --git a/libmultipath/hwtable.c b/libmultipath/hwtable.c
-index e4fe380..9933f76 100644
+index e4fe380..9e6888e 100644
 --- a/libmultipath/hwtable.c
 +++ b/libmultipath/hwtable.c
-@@ -759,7 +759,23 @@ static struct hwentry default_hw[] = {
+@@ -35,6 +35,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -57,6 +58,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DEFAULT_CHECKER,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -79,6 +81,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DEFAULT_CHECKER,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -95,6 +98,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = HP_SW,
+ 		.prio_name     = PRIO_HP_SW,
+ 		.prio_args     = NULL,
+@@ -111,6 +115,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 12,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -232,7 +237,8 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 12,
+ 		.minio         = DEFAULT_MINIO,
+-		.checker_name  = CCISS_TUR,
++		.minio_rq      = DEFAULT_MINIO_RQ,
++		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+ 	},
+@@ -254,6 +260,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -276,6 +283,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -293,6 +301,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = (300 / DEFAULT_CHECKINT),
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = EMC_CLARIION,
+ 		.prio_name     = PRIO_EMC,
+ 		.prio_args     = NULL,
+@@ -310,6 +319,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 5,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+ 	},
+@@ -331,6 +341,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -348,6 +359,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 5,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -370,6 +382,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -386,6 +399,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = PRIO_HDS,
+ 		.prio_args     = NULL,
+@@ -408,6 +422,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -425,6 +440,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 300,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -442,6 +458,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 300,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -459,6 +476,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 300,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -476,6 +494,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -492,6 +511,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -509,6 +529,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -526,6 +547,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -543,6 +565,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -560,6 +583,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -577,6 +601,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -594,6 +619,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -611,6 +637,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -628,6 +655,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = PRIO_ALUA,
+ 		.prio_args     = NULL,
+@@ -645,6 +673,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -662,6 +691,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = PRIO_ALUA,
+ 		.prio_args     = NULL,
+@@ -680,6 +710,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -698,6 +729,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -715,6 +747,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = PRIO_ALUA,
+ 		.prio_args     = NULL,
+@@ -738,6 +771,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = (300 / DEFAULT_CHECKINT),
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -755,11 +789,29 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = (300 / DEFAULT_CHECKINT),
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
  		.prio_name     = DEFAULT_PRIO,
  		.prio_args     = NULL,
  	},
@@ -608,6 +2270,7 @@ index e4fe380..9933f76 100644
 +		.rr_weight     = RR_WEIGHT_NONE,
 +		.no_path_retry = (300 / DEFAULT_CHECKINT),
 +		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
 +		.checker_name  = TUR,
 +		.prio_name     = PRIO_ALUA,
 +		.prio_args     = NULL,
@@ -615,7 +2278,44 @@ index e4fe380..9933f76 100644
  	{
  		/* DELL MD3000 */
  		.vendor        = "DELL",
-@@ -916,6 +932,7 @@ static struct hwentry default_hw[] = {
+@@ -773,6 +825,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -790,6 +843,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -807,6 +861,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -824,6 +879,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -912,10 +968,12 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
  		.prio_name     = PRIO_ALUA,
  		.prio_args     = NULL,
  	},
@@ -623,6 +2323,129 @@ index e4fe380..9933f76 100644
  	/*
  	 * SGI arrays
  	 *
+@@ -934,6 +992,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+@@ -950,6 +1009,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -958,14 +1018,15 @@ static struct hwentry default_hw[] = {
+ 		.vendor        = "SGI",
+ 		.product       = "IS.*",
+ 		.getuid        = DEFAULT_GETUID,
+-		.features      = DEFAULT_FEATURES,
++		.features      = "2 pg_init_retries 50",
+ 		.hwhandler     = "1 rdac",
+ 		.selector      = DEFAULT_SELECTOR,
+ 		.pgpolicy      = GROUP_BY_PRIO,
+ 		.pgfailback    = -FAILBACK_IMMEDIATE,
+ 		.rr_weight     = RR_WEIGHT_NONE,
+-		.no_path_retry = NO_PATH_RETRY_QUEUE,
++		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -988,6 +1049,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = TUR,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -1010,10 +1072,27 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_UNDEF,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = DIRECTIO,
+ 		.prio_name     = DEFAULT_PRIO,
+ 		.prio_args     = NULL,
+ 	},
++	{
++		.vendor        = "EUROLOGC",
++		.product       = "FC2502",
++		.getuid        ="/lib/udev/scsi_id --page=0x80 --whitelisted --device=/dev/%n",
++		.features      = DEFAULT_FEATURES,
++		.hwhandler     = DEFAULT_HWHANDLER,
++		.selector      = DEFAULT_SELECTOR,
++		.pgpolicy      = GROUP_BY_PRIO,
++		.pgfailback    = FAILBACK_UNDEF,
++		.rr_weight     = RR_WEIGHT_NONE,
++		.no_path_retry = NO_PATH_RETRY_UNDEF,
++		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
++		.checker_name  = DEFAULT_CHECKER,
++		.prio_name     = DEFAULT_PRIO,
++	},
+ 	/*
+ 	 * Pivot3 RAIGE
+ 	 *
+@@ -1048,6 +1127,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -1065,6 +1145,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -1082,6 +1163,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = 15,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -1099,6 +1181,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = RR_WEIGHT_NONE,
+ 		.no_path_retry = NO_PATH_RETRY_QUEUE,
+ 		.minio         = DEFAULT_MINIO,
++		.minio_rq      = DEFAULT_MINIO_RQ,
+ 		.checker_name  = RDAC,
+ 		.prio_name     = PRIO_RDAC,
+ 		.prio_args     = NULL,
+@@ -1118,6 +1201,7 @@ static struct hwentry default_hw[] = {
+ 		.rr_weight     = 0,
+ 		.no_path_retry = 0,
+ 		.minio         = 0,
++		.minio_rq      = 0,
+ 		.checker_name  = NULL,
+ 		.prio_name     = NULL,
+ 		.prio_args     = NULL,
+diff --git a/libmultipath/log.c b/libmultipath/log.c
+index e56e46b..57b7696 100644
+--- a/libmultipath/log.c
++++ b/libmultipath/log.c
+@@ -142,7 +142,7 @@ int log_enqueue (int prio, const char * fmt, va_list ap)
+ 	la->empty = 0;
+ 	msg = (struct logmsg *)la->tail;
+ 	msg->prio = prio;
+-	strcpy((void *)&msg->str, buff);
++	memcpy((void *)&msg->str, buff, strlen(buff) + 1);
+ 	lastmsg->next = la->tail;
+ 	msg->next = la->head;
+ 
 diff --git a/libmultipath/parser.c b/libmultipath/parser.c
 index eb3815e..b964ce7 100644
 --- a/libmultipath/parser.c
@@ -818,6 +2641,117 @@ index 95d4e6f..fb182ec 100644
  extern void dump_keywords(vector keydump, int level);
  extern void free_keywords(vector keywords);
  extern vector alloc_strvec(char *string);
+diff --git a/libmultipath/pgpolicies.c b/libmultipath/pgpolicies.c
+index cfaf1c3..f76ad60 100644
+--- a/libmultipath/pgpolicies.c
++++ b/libmultipath/pgpolicies.c
+@@ -11,6 +11,7 @@
+ #include "vector.h"
+ #include "structs.h"
+ #include "pgpolicies.h"
++#include "switchgroup.h"
+ 
+ extern int
+ get_pgpolicy_id (char * str)
+@@ -57,6 +58,34 @@ get_pgpolicy_name (char * buff, int len, int id)
+ 	return snprintf(buff, POLICY_NAME_SIZE, "%s", s);
+ }
+ 
++
++void
++sort_pathgroups (struct multipath *mp) {
++	int i, j;
++	struct pathgroup * pgp1, * pgp2;
++
++	if (!mp->pg)
++		return;
++
++	vector_foreach_slot(mp->pg, pgp1, i) {
++		path_group_prio_update(pgp1);
++		for (j = i - 1; j >= 0; j--) {
++			pgp2 = VECTOR_SLOT(mp->pg, j);
++			if (!pgp2)
++				continue;
++			if (pgp2->priority > pgp1->priority ||
++			    (pgp2->priority == pgp1->priority &&
++			     pgp2->enabled_paths >= pgp1->enabled_paths)) {
++				vector_move_up(mp->pg, i, j + 1);
++				break;
++			}
++		}
++		if (j < 0 && i != 0)
++		vector_move_up(mp->pg, i, 0);
++	}
++}
++
++
+ /*
+  * One path group per unique tgt_node_name present in the path vector
+  */
+@@ -119,6 +148,7 @@ group_by_node_name (struct multipath * mp) {
+ 		}
+ 	}
+ 	FREE(bitmap);
++	sort_pathgroups(mp);
+ 	free_pathvec(mp->paths, KEEP_PATHS);
+ 	mp->paths = NULL;
+ 	return 0;
+@@ -191,6 +221,7 @@ group_by_serial (struct multipath * mp) {
+ 		}
+ 	}
+ 	FREE(bitmap);
++	sort_pathgroups(mp);
+ 	free_pathvec(mp->paths, KEEP_PATHS);
+ 	mp->paths = NULL;
+ 	return 0;
+@@ -228,6 +259,7 @@ one_path_per_group (struct multipath * mp)
+ 		if (store_path(pgp->paths, pp))
+ 			goto out;
+ 	}
++	sort_pathgroups(mp);
+ 	free_pathvec(mp->paths, KEEP_PATHS);
+ 	mp->paths = NULL;
+ 	return 0;
+diff --git a/libmultipath/print.c b/libmultipath/print.c
+index 4279fe9..cf634ba 100644
+--- a/libmultipath/print.c
++++ b/libmultipath/print.c
+@@ -379,7 +379,6 @@ snprint_pg_selector (char * buff, size_t len, struct pathgroup * pgp)
+ static int
+ snprint_pg_pri (char * buff, size_t len, struct pathgroup * pgp)
+ {
+-	int avg_priority = 0;
+ 	/*
+ 	 * path group priority is not updated for every path prio change,
+ 	 * but only on switch group code path.
+@@ -387,9 +386,7 @@ snprint_pg_pri (char * buff, size_t len, struct pathgroup * pgp)
+ 	 * Printing is another reason to update.
+ 	 */
+ 	path_group_prio_update(pgp);
+-	if (pgp->enabled_paths)
+-		avg_priority = pgp->priority / pgp->enabled_paths;
+-	return snprint_int(buff, len, avg_priority);
++	return snprint_int(buff, len, pgp->priority);
+ }
+ 
+ static int
+diff --git a/libmultipath/prioritizers/Makefile b/libmultipath/prioritizers/Makefile
+index 132b39e..6e28ab7 100644
+--- a/libmultipath/prioritizers/Makefile
++++ b/libmultipath/prioritizers/Makefile
+@@ -20,10 +20,10 @@ CFLAGS += -I..
+ all: $(LIBS)
+ 
+ libprioalua.so: alua.o alua_rtpg.o
+-	$(CC) $(SHARED_FLAGS) -o $@ $^
++	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -o $@ $^
+ 
+ libprio%.so: %.o
+-	$(CC) $(SHARED_FLAGS) -o $@ $^
++	$(CC) $(LDFLAGS) $(SHARED_FLAGS) -o $@ $^
+ 
+ install: $(LIBS)
+ 	$(INSTALL_PROGRAM) -m 755 libprio*.so $(DESTDIR)$(libdir)
 diff --git a/libmultipath/prioritizers/alua_rtpg.c b/libmultipath/prioritizers/alua_rtpg.c
 index 0531052..b85cfdf 100644
 --- a/libmultipath/prioritizers/alua_rtpg.c
@@ -831,11 +2765,45 @@ index 0531052..b85cfdf 100644
  	scsi_buflen = (buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3]) + 4;
  	if (buflen < scsi_buflen) {
  		free(buf);
+diff --git a/libmultipath/prioritizers/datacore.c b/libmultipath/prioritizers/datacore.c
+index 6b7b202..2c16c6c 100644
+--- a/libmultipath/prioritizers/datacore.c
++++ b/libmultipath/prioritizers/datacore.c
+@@ -94,7 +94,7 @@ int datacore_prio (const char *dev, int sg_fd, char * args)
+ 	if ((io_hdr.info & SG_INFO_OK_MASK) != SG_INFO_OK)
+ 		return 0;
+ 
+-	snprintf(vendor, 9, "%.8s\n", inqBuffp + 8);
++	snprintf(vendor, 8, "%.8s\n", inqBuffp + 8);
+ 	snprintf(product, 17, "%.16s", inqBuffp + 16);
+ 	snprintf(luname, 21, "%.19s", inqBuffp + 36);
+ 	snprintf(wwpn, 17, "%.16s", inqBuffp + 96);
+diff --git a/libmultipath/prioritizers/hds.c b/libmultipath/prioritizers/hds.c
+index 7b354b2..4789340 100644
+--- a/libmultipath/prioritizers/hds.c
++++ b/libmultipath/prioritizers/hds.c
+@@ -123,7 +123,7 @@ int hds_modular_prio (const char *dev, int fd)
+ 		return -1;
+ 	}
+ 
+-	snprintf (vendor, 9, "%.8s", inqBuffp + 8);
++	snprintf (vendor, 8, "%.8s", inqBuffp + 8);
+ 	snprintf (product, 17, "%.16s", inqBuffp + 16);
+ 	snprintf (serial, 5, "%.4s", inqBuffp + 40);
+ 	snprintf (ldev, 5, "%.4s", inqBuffp + 44);
 diff --git a/libmultipath/propsel.c b/libmultipath/propsel.c
-index 2187558..80e0c40 100644
+index 2187558..2055d2a 100644
 --- a/libmultipath/propsel.c
 +++ b/libmultipath/propsel.c
-@@ -215,27 +215,42 @@ select_selector (struct multipath * mp)
+@@ -16,6 +16,7 @@
+ #include "defaults.h"
+ #include "devmapper.h"
+ #include "prio.h"
++#include "discovery.h"
+ 
+ pgpolicyfn *pgpolicies[] = {
+ 	NULL,
+@@ -215,27 +216,42 @@ select_selector (struct multipath * mp)
  	return 0;
  }
  
@@ -890,7 +2858,95 @@ index 2187558..80e0c40 100644
  	}
  
  	return 0;
-@@ -450,7 +465,7 @@ select_pg_timeout(struct multipath *mp)
+@@ -292,17 +308,31 @@ select_checker(struct path *pp)
+ 		checker_get(c, pp->hwe->checker_name);
+ 		condlog(3, "%s: path checker = %s (controller setting)",
+ 			pp->dev, checker_name(c));
+-		return 0;
++		goto out;
+ 	}
+ 	if (conf->checker_name) {
+ 		checker_get(c, conf->checker_name);
+ 		condlog(3, "%s: path checker = %s (config file default)",
+ 			pp->dev, checker_name(c));
+-		return 0;
++		goto out;
+ 	}
+ 	checker_get(c, DEFAULT_CHECKER);
+ 	condlog(3, "%s: path checker = %s (internal default)",
+ 		pp->dev, checker_name(c));
++out:
++	if (conf->checker_timeout) {
++		c->timeout = conf->checker_timeout * 1000;
++		condlog(3, "%s: checker timeout = %u ms (config file default)",
++				pp->dev, c->timeout);
++	}
++	else if (sysfs_get_timeout(pp->sysdev, &c->timeout) == 0)
++		condlog(3, "%s: checker timeout = %u ms (sysfs setting)",
++				pp->dev, c->timeout);
++	else {
++		c->timeout = DEF_TIMEOUT;
++		condlog(3, "%s: checker timeout = %u ms (internal default)",
++				pp->dev, c->timeout);
++	}
+ 	return 0;
+ }
+ 
+@@ -388,8 +418,35 @@ select_no_path_retry(struct multipath *mp)
+ 	return 0;
+ }
+ 
+-extern int
+-select_minio (struct multipath * mp)
++int
++select_minio_rq (struct multipath * mp)
++{
++	if (mp->mpe && mp->mpe->minio_rq) {
++		mp->minio = mp->mpe->minio_rq;
++		condlog(3, "%s: minio = %i rq (LUN setting)",
++			mp->alias, mp->minio);
++		return 0;
++	}
++	if (mp->hwe && mp->hwe->minio_rq) {
++		mp->minio = mp->hwe->minio_rq;
++		condlog(3, "%s: minio = %i rq (controller setting)",
++			mp->alias, mp->minio);
++		return 0;
++	}
++	if (conf->minio) {
++		mp->minio = conf->minio_rq;
++		condlog(3, "%s: minio = %i rq (config file default)",
++			mp->alias, mp->minio);
++		return 0;
++	}
++	mp->minio = DEFAULT_MINIO_RQ;
++	condlog(3, "%s: minio = %i rq (internal default)",
++		mp->alias, mp->minio);
++	return 0;
++}
++
++int
++select_minio_bio (struct multipath * mp)
+ {
+ 	if (mp->mpe && mp->mpe->minio) {
+ 		mp->minio = mp->mpe->minio;
+@@ -416,6 +473,15 @@ select_minio (struct multipath * mp)
+ }
+ 
+ extern int
++select_minio (struct multipath * mp)
++{
++	if (conf->dmrq)
++		return select_minio_rq(mp);
++	else
++		return select_minio_bio(mp);
++}
++
++extern int
+ select_pg_timeout(struct multipath *mp)
+ {
+ 	if (mp->mpe && mp->mpe->pg_timeout != PGTIMEOUT_UNDEF) {
+@@ -450,7 +516,7 @@ select_pg_timeout(struct multipath *mp)
  		return 0;
  	}
  	mp->pg_timeout = PGTIMEOUT_UNDEF;
@@ -915,10 +2971,43 @@ index a4b86d2..82df680 100644
  		mpp->alias = NULL;
  	}
 diff --git a/libmultipath/structs.h b/libmultipath/structs.h
-index c559838..fc6413b 100644
+index c559838..78ba81e 100644
 --- a/libmultipath/structs.h
 +++ b/libmultipath/structs.h
-@@ -186,6 +186,7 @@ struct multipath {
+@@ -119,12 +119,23 @@ struct sysfs_device {
+ 	char driver[NAME_SIZE];			/* device driver name */
+ };
+ 
++# ifndef HDIO_GETGEO
++#  define HDIO_GETGEO	0x0301	/* get device geometry */
++
++struct hd_geometry {
++      unsigned char heads;
++      unsigned char sectors;
++      unsigned short cylinders;
++      unsigned long start;
++};
++#endif
+ struct path {
+ 	char dev[FILE_NAME_SIZE];
+ 	char dev_t[BLK_DEV_SIZE];
+ 	struct sysfs_device *sysdev;
+ 	struct scsi_idlun scsi_id;
+ 	struct sg_id sg_id;
++	struct hd_geometry geom;
+ 	char wwid[WWID_SIZE];
+ 	char vendor_id[SCSI_VENDOR_SIZE];
+ 	char product_id[SCSI_PRODUCT_SIZE];
+@@ -146,7 +157,7 @@ struct path {
+ 	struct checker checker;
+ 	struct multipath * mpp;
+ 	int fd;
+-	
++
+ 	/* configlet pointers */
+ 	struct hwentry * hwe;
+ };
+@@ -186,6 +197,7 @@ struct multipath {
  
  	/* configlet pointers */
  	char * alias;
@@ -927,10 +3016,30 @@ index c559838..fc6413b 100644
  	char * features;
  	char * hwhandler;
 diff --git a/libmultipath/structs_vec.c b/libmultipath/structs_vec.c
-index 699efa1..c526a70 100644
+index 699efa1..3f574c1 100644
 --- a/libmultipath/structs_vec.c
 +++ b/libmultipath/structs_vec.c
-@@ -335,16 +335,18 @@ retry:
+@@ -46,7 +46,7 @@ update_mpp_paths(struct multipath * mpp, vector pathvec)
+ }
+ 
+ extern int
+-adopt_paths (vector pathvec, struct multipath * mpp)
++adopt_paths (vector pathvec, struct multipath * mpp, int get_info)
+ {
+ 	int i;
+ 	struct path * pp;
+@@ -69,7 +69,9 @@ adopt_paths (vector pathvec, struct multipath * mpp)
+ 			if (!find_path_by_dev(mpp->paths, pp->dev) &&
+ 			    store_path(mpp->paths, pp))
+ 					return 1;
+-			pathinfo(pp, conf->hwtable, DI_PRIO | DI_CHECKER);
++			if (get_info)
++				pathinfo(pp, conf->hwtable,
++					 DI_PRIO | DI_CHECKER);
+ 		}
+ 	}
+ 	return 0;
+@@ -335,16 +337,18 @@ retry:
  	condlog(3, "%s: discover", mpp->alias);
  
  	if (update_multipath_strings(mpp, vecs->pathvec)) {
@@ -952,11 +3061,121 @@ index 699efa1..c526a70 100644
  
  			if (mpp->waiter)
  				strncpy(((struct event_thread *)mpp->waiter)->mapname,
+@@ -355,7 +359,6 @@ retry:
+ 		goto out;
+ 	}
+ 
+-	//adopt_paths(vecs->pathvec, mpp);
+ 	if (!mpp->hwe)
+ 		mpp->hwe = extract_hwe_from_path(mpp);
+ 	if (!mpp->hwe) {
+@@ -390,7 +393,7 @@ add_map_without_path (struct vectors * vecs,
+ 		return NULL; /* mpp freed in setup_multipath */
+ 	}
+ 
+-	if (adopt_paths(vecs->pathvec, mpp))
++	if (adopt_paths(vecs->pathvec, mpp, 1))
+ 		goto out;
+ 
+ 	if (!vector_alloc_slot(vecs->mpvec))
+@@ -423,7 +426,7 @@ add_map_with_path (struct vectors * vecs,
+ 	select_alias(mpp);
+ 	mpp->size = pp->size;
+ 
+-	if (adopt_paths(vecs->pathvec, mpp))
++	if (adopt_paths(vecs->pathvec, mpp, 1))
+ 		goto out;
+ 
+ 	if (add_vec) {
+@@ -498,6 +501,7 @@ int update_multipath (struct vectors *vecs, char *mapname)
+ 	if (setup_multipath(vecs, mpp))
+ 		return 1; /* mpp freed in setup_multipath */
+ 
++	adopt_paths(vecs->pathvec, mpp, 0);
+ 	/*
+ 	 * compare checkers states with DM states
+ 	 */
+diff --git a/libmultipath/structs_vec.h b/libmultipath/structs_vec.h
+index 78e468a..d059da5 100644
+--- a/libmultipath/structs_vec.h
++++ b/libmultipath/structs_vec.h
+@@ -15,7 +15,7 @@ struct vectors {
+ 
+ void set_no_path_retry(struct multipath *mpp);
+ 
+-int adopt_paths (vector pathvec, struct multipath * mpp);
++int adopt_paths (vector pathvec, struct multipath * mpp, int get_info);
+ void orphan_paths (vector pathvec, struct multipath * mpp);
+ void orphan_path (struct path * pp);
+ 
+diff --git a/libmultipath/switchgroup.c b/libmultipath/switchgroup.c
+index d995cd3..025a95d 100644
+--- a/libmultipath/switchgroup.c
++++ b/libmultipath/switchgroup.c
+@@ -25,14 +25,17 @@ path_group_prio_update (struct pathgroup * pgp)
+ 			pgp->enabled_paths++;
+ 		}
+ 	}
+-	pgp->priority = priority;
++	if (pgp->enabled_paths)
++		pgp->priority = priority / pgp->enabled_paths;
++	else
++		pgp->priority = 0;
+ }
+ 
+ extern int
+ select_path_group (struct multipath * mpp)
+ {
+ 	int i;
+-	int max_priority = 0, avg_priority;
++	int max_priority = 0;
+ 	int bestpg = 1;
+ 	int max_enabled_paths = 1;
+ 	struct pathgroup * pgp;
+@@ -46,12 +49,11 @@ select_path_group (struct multipath * mpp)
+ 
+ 		path_group_prio_update(pgp);
+ 		if (pgp->enabled_paths) {
+-			avg_priority = pgp->priority / pgp->enabled_paths;
+-			if (avg_priority > max_priority) {
+-				max_priority = avg_priority;
++			if (pgp->priority > max_priority) {
++				max_priority = pgp->priority;
+ 				max_enabled_paths = pgp->enabled_paths;
+ 				bestpg = i + 1;
+-			} else if (avg_priority == max_priority) {
++			} else if (pgp->priority == max_priority) {
+ 				if (pgp->enabled_paths > max_enabled_paths) {
+ 					max_enabled_paths = pgp->enabled_paths;
+ 					bestpg = i + 1;
 diff --git a/libmultipath/vector.c b/libmultipath/vector.c
-index 3415461..67c7500 100644
+index 3415461..ea6f82c 100644
 --- a/libmultipath/vector.c
 +++ b/libmultipath/vector.c
-@@ -96,7 +96,7 @@ vector_del_slot(vector v, int slot)
+@@ -50,6 +50,22 @@ vector_alloc_slot(vector v)
+ 	return v->slot;
+ }
+ 
++int
++vector_move_up(vector v, int src, int dest)
++{
++	void *value;
++	int i;
++	if (dest == src)
++		return 0;
++	if (dest > src || src >= v->allocated)
++		return -1;
++	value = v->slot[src];
++	for (i = src - 1; i >= dest; i--)
++		v->slot[i + 1] = v->slot[i];
++	v->slot[dest] = value;
++	return 0;
++}
++
+ void *
+ vector_insert_slot(vector v, int slot, void *value)
+ {
+@@ -96,7 +112,7 @@ vector_del_slot(vector v, int slot)
  		v->slot = NULL;
  	}
  	else
@@ -965,10 +3184,67 @@ index 3415461..67c7500 100644
  }
  
  void
+diff --git a/libmultipath/vector.h b/libmultipath/vector.h
+index 59cfd27..27cca73 100644
+--- a/libmultipath/vector.h
++++ b/libmultipath/vector.h
+@@ -52,5 +52,5 @@ int find_slot(vector v, void * addr);
+ extern void vector_repack(vector v);
+ extern void vector_dump(vector v);
+ extern void dump_strvec(vector strvec);
+-
++extern int vector_move_up(vector v, int src, int dest);
+ #endif
+diff --git a/multipath.conf.annotated b/multipath.conf.annotated
+index 9be7a2d..19bdd48 100644
+--- a/multipath.conf.annotated
++++ b/multipath.conf.annotated
+@@ -27,14 +27,14 @@
+ #	polling_interval 10
+ #
+ #	#
+-#	# name    : selector
++#	# name    : path_selector
+ #	# scope   : multipath & multipathd
+ #	# desc    : the default path selector algorithm to use
+ #	#           these algorithms are offered by the kernel multipath target
+ #	# values  : "round-robin 0"
+ #	# default : "round-robin 0"
+ #	#
+-#	selector	"round-robin 0"
++#	path_selector	"round-robin 0"
+ #
+ #	#
+ #	# name    : path_grouping_policy
+@@ -211,6 +211,15 @@
+ #	gid disk
+ #
+ #	#
++#	# name    : checker_timeout
++#	# scope   : multipath & multipathd
++#	# desc    : The timeout to use for path checkers that issue scsi
++#	#           commands with an explicit timeout, in seconds.
++#	# values  : n > 0
++#	# default : taken from /sys/block/sd<x>/device/timeout
++#	checker_timeout 60
++#
++#	#
+ #	# name    : fast_io_fail_tmo
+ #	# scope   : multipath & multipathd
+ #	# desc    : The number of seconds the scsi layer will wait after a
 diff --git a/multipath.conf.defaults b/multipath.conf.defaults
-index 886a678..9f737aa 100644
+index 886a678..f8ca0a2 100644
 --- a/multipath.conf.defaults
 +++ b/multipath.conf.defaults
+@@ -4,7 +4,7 @@
+ #defaults {
+ #	udev_dir		/dev
+ #	polling_interval	5
+-#	selector		"round-robin 0"
++#	path_selector		"round-robin 0"
+ #	path_grouping_policy	failover
+ #	getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+ #	prio			const
 @@ -552,6 +552,47 @@
  #		prio_args		""
  #	}
@@ -1017,6 +3293,53 @@ index 886a678..9f737aa 100644
  #		vendor			"SGI"
  #		product			"TP9[13]00"
  #		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+@@ -585,13 +626,13 @@
+ #		vendor			"SGI"
+ #		product			"IS.*"
+ #		getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+-#		features		"0"
++#		features		"2 pg_init_retries 50"
+ #		hardware_handler	"1 rdac"
+ #		path_selector		"round-robin 0"
+ #		path_grouping_policy	group_by_prio
+ #		failback		immediate
+ #		rr_weight		uniform
+-#		no_path_retry		queue
++#		no_path_retry		15
+ #		rr_min_io		1000
+ #		path_checker		rdac
+ #		prio			rdac
+@@ -689,4 +730,17 @@
+ #		prio			rdac
+ #		prio_args		""
+ #	}
++#	device {
++#		vendor			"EUROLOGC"
++#		product			"FC2502"
++#		getuid_callout		"/lib/udev/scsi_id --page=0x80 --whitelisted --device=/dev/%n"
++#		features                "0"
++#		hardware_handler        "0"
++#		path_selector           "round-robin 0"
++#		path_grouping_policy    group_by_prio
++#		rr_weight               uniform
++#		rr_min_io               1000
++#		path_checker		directio
++#		prio			const
++#	}
+ #}
+diff --git a/multipath.conf.synthetic b/multipath.conf.synthetic
+index 44d1329..bda1b75 100644
+--- a/multipath.conf.synthetic
++++ b/multipath.conf.synthetic
+@@ -5,7 +5,7 @@
+ #defaults {
+ #	udev_dir		/dev
+ #	polling_interval 	10
+-#	selector		"round-robin 0"
++#	path_selector		"round-robin 0"
+ #	path_grouping_policy	multibus
+ #	getuid_callout		"/lib/udev/scsi_id --whitelisted --device=/dev/%n"
+ #	prio			const
 diff --git a/multipath/Makefile b/multipath/Makefile
 index 5cbab2f..f748417 100644
 --- a/multipath/Makefile
@@ -1077,7 +3400,7 @@ index 7ba7126..2a6e0aa 100644
  force maps to specified policy:
  .RS 1.2i
 diff --git a/multipath/multipath.conf.5 b/multipath/multipath.conf.5
-index 165982e..8c191ce 100644
+index 165982e..5056414 100644
 --- a/multipath/multipath.conf.5
 +++ b/multipath/multipath.conf.5
 @@ -40,7 +40,8 @@ The following \fIsection\fP keywords are recognized:
@@ -1090,6 +3413,57 @@ index 165982e..8c191ce 100644
  .TP
  .B blacklist
  This section defines which devices should be excluded from the
+@@ -81,10 +82,22 @@ default verbosity. Higher values increase the verbosity level. Valid
+ levels are between 0 and 6; default is
+ .I 2
+ .TP
+-.B selector
++.B path_selector
+ The default path selector algorithm to use; they are offered by the
+-kernel multipath target. The only currently implemented is
+-.I "round-robin 0"
++kernel multipath target. There are three selector algorithms.
++.RS
++.TP 12
++.B "round-robin 0"
++Loop through every path in the path group, sending the same amount of IO to
++each.
++.TP
++.B "queue-length 0"
++Send the next bunch of IO down the path with the least amount of outstanding IO.
++.TP
++.B "service-time 0"
++Choose the path for the next bunch of IO based on the amount of outstanding IO
++to the path and its relative throughput.
++.RE
+ .TP
+ .B path_grouping_policy
+ The default path grouping policy to apply to unspecified
+@@ -241,6 +254,11 @@ maximum number of open fds is taken from the calling process. It is usually
+ 1024. To be safe, this should be set to the maximum number of paths plus 32,
+ if that number is greated than 1024.
+ .TP
++.B checker_timeout
++Specify the timeout to user for path checkers that issue scsi commands with an
++explict timeout, in seconds; default taken from
++.I /sys/block/sd<x>/device/timeout
++.TP
+ .B fast_io_fail_tmo
+ Specify the number of seconds the scsi layer will wait after a problem has been
+ detected on a FC remote port before failing IO to devices on that remote port.
+@@ -369,8 +387,11 @@ subsection recognizes the following attributes:
+ .B product
+ (Mandatory) Product identifier
+ .TP
++.B revision
++(Optional) Revision identfier
++.TP
+ .B product_blacklist
+-Product strings to blacklist for this vendor
++(Optional) Product strings to blacklist for this vendor
+ .TP
+ .B hardware_handler
+ (Optional) The hardware handler to use for this device type.
 diff --git a/multipathd/Makefile b/multipathd/Makefile
 index 32d9ef5..03b0aa2 100644
 --- a/multipathd/Makefile
@@ -1135,7 +3509,7 @@ index 208a0ad..b39a47f 100644
  	if (!state) {
  		index = 0;
 diff --git a/multipathd/main.c b/multipathd/main.c
-index 6ee7903..e167b8b 100644
+index 6ee7903..bf104a1 100644
 --- a/multipathd/main.c
 +++ b/multipathd/main.c
 @@ -47,6 +47,7 @@
@@ -1146,7 +3520,79 @@ index 6ee7903..e167b8b 100644
  
  #include "main.h"
  #include "pidfile.h"
-@@ -917,10 +918,33 @@ retry_count_tick(vector mpvec)
+@@ -386,7 +387,7 @@ ev_add_path (char * devname, struct vectors * vecs)
+ 	 */
+ 	if (memcmp(empty_buff, pp->wwid, WWID_SIZE) == 0) {
+ 		condlog(0, "%s: failed to get path uid", devname);
+-		return 1; /* leave path added to pathvec */
++		goto fail; /* leave path added to pathvec */
+ 	}
+ 	if (filter_path(conf, pp) > 0){
+ 		int i = find_slot(vecs->pathvec, (void *)pp);
+@@ -416,8 +417,8 @@ rescan:
+ 
+ 		condlog(4,"%s: adopting all paths for path %s",
+ 			mpp->alias, pp->dev);
+-		if (adopt_paths(vecs->pathvec, mpp))
+-			return 1; /* leave path added to pathvec */
++		if (adopt_paths(vecs->pathvec, mpp, 1))
++			goto fail; /* leave path added to pathvec */
+ 
+ 		verify_paths(mpp, vecs, NULL);
+ 		mpp->flush_on_last_del = FLUSH_UNDEF;
+@@ -438,7 +439,7 @@ rescan:
+ 		if ((mpp = add_map_with_path(vecs, pp, 1)))
+ 			mpp->action = ACT_CREATE;
+ 		else
+-			return 1; /* leave path added to pathvec */
++			goto fail; /* leave path added to pathvec */
+ 	}
+ 
+ 	/*
+@@ -447,7 +448,7 @@ rescan:
+ 	if (setup_map(mpp)) {
+ 		condlog(0, "%s: failed to setup map for addition of new "
+ 			"path %s", mpp->alias, devname);
+-		goto out;
++		goto fail_map;
+ 	}
+ 	/*
+ 	 * reload the map for the multipath mapped device
+@@ -465,7 +466,7 @@ rescan:
+ 			goto rescan;
+ 		}
+ 		else
+-			goto out;
++			goto fail_map;
+ 	}
+ 	dm_lib_release();
+ 
+@@ -473,19 +474,21 @@ rescan:
+ 	 * update our state from kernel regardless of create or reload
+ 	 */
+ 	if (setup_multipath(vecs, mpp))
+-		goto out;
++		goto fail_map;
+ 
+ 	sync_map_state(mpp);
+ 
+ 	if (mpp->action == ACT_CREATE &&
+ 	    start_waiter_thread(mpp, vecs))
+-			goto out;
++			goto fail_map;
+ 
+ 	condlog(2, "%s path added to devmap %s", devname, mpp->alias);
+ 	return 0;
+ 
+-out:
++fail_map:
+ 	remove_map(mpp, vecs, 1);
++fail:
++	orphan_path(pp);
+ 	return 1;
+ }
+ 
+@@ -917,10 +920,33 @@ retry_count_tick(vector mpvec)
  	}
  }
  
@@ -1180,7 +3626,7 @@ index 6ee7903..e167b8b 100644
  
  	if (!pp->mpp)
  		return;
-@@ -1030,12 +1054,16 @@ check_path (struct vectors * vecs, struct path * pp)
+@@ -1030,12 +1056,16 @@ check_path (struct vectors * vecs, struct path * pp)
  	 * path prio refreshing
  	 */
  	condlog(4, "path prio refresh");
@@ -1198,3 +3644,66 @@ index 6ee7903..e167b8b 100644
  		if (pp->mpp->pgfailback > 0 &&
  		    pp->mpp->failback_tick <= 0)
  			pp->mpp->failback_tick =
+@@ -1133,7 +1163,7 @@ configure (struct vectors * vecs, int start_waiters)
+ 	/*
+ 	 * create new set of maps & push changed ones into dm
+ 	 */
+-	if (coalesce_paths(vecs, mpvec, NULL, 0))
++	if (coalesce_paths(vecs, mpvec, NULL, 1))
+ 		return 1;
+ 
+ 	/*
+diff --git a/multipathd/multipathd.8 b/multipathd/multipathd.8
+index c63185c..cbc40a4 100644
+--- a/multipathd/multipathd.8
++++ b/multipathd/multipathd.8
+@@ -35,9 +35,17 @@ The following commands can be used in interactive mode:
+ .B list|show paths
+ Show the paths that multipathd is monitoring, and their state. 
+ .TP
++.B list|show paths format $format
++Show the paths that multipathd is monitoring, using a format string with path
++format wildcards.
++.TP
+ .B list|show maps|multipaths
+ Show the multipath devices that the multipathd is monitoring. 
+ .TP
++.B list|show maps|multipaths format $format
++Show the status of all multipath devices that the multipathd is monitoring,
++using a format string with multipath format wildcards.
++.TP
+ .B list|show maps|multipaths status
+ Show the status of all multipath devices that the multipathd is monitoring.
+ .TP
+@@ -54,6 +62,9 @@ Show the current multipath topology. Same as "multipath -ll".
+ Show topology of a single multipath device specified by $map, e.g. 36005076303ffc56200000000000010aa.
+ This map could be obtained from "list maps".
+ .TP
++.B list|show wildcards
++Show the format wildcards used in interactive commands taking $format
++.TP
+ .B list|show config
+ Show the currently used configuration, derived from default values and values specified within the configuration file /etc/multipath.conf.
+ .TP
+@@ -99,11 +110,20 @@ Sets path $path into failed state.
+ .B reinstate path $path
+ Resumes path $path from failed state.
+ .TP
++.B disablequeueing maps|multipaths
++Disable queueing on all multipath devices.
++.TP
++.B restorequeueing maps|multipaths
++Restore queueing on all multipath devices.
++.TP
+ .B disablequeueing map|multipath $map
+-Disabled queuing on multipathed map $map
++Disable queuing on multipathed map $map
+ .TP
+ .B restorequeueing map|multipath $map
+ Restore queuing on multipahted map $map
++.TP
++.B quit|exit
++End interactive session.
+ 
+ .SH "SEE ALSO"
+ .BR multipath (8)
