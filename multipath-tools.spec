@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.9
-Release:	6
+Release:	7
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -26,6 +26,7 @@ BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
+BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
 BuildRequires:	sysfsutils-devel >= 2.0.0
 %if %{with initrd}
@@ -37,6 +38,7 @@ Requires:	device-mapper >= 1.02.08
 Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
+Requires:	systemd-units >= 38
 %if "%{pld_release}" == "th"
 Requires:	udev-core >= 1:127
 %endif
@@ -48,7 +50,7 @@ Requires:	udev-core >= 1:079-10
 %endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
-%define		skip_post_check_so	libmultipath.so.0
+%define		skip_post_check_so	libmultipath.so.0 libmpathpersist.so.0
 %define		_sbindir	/sbin
 
 %description
@@ -153,21 +155,31 @@ rm -rf $RPM_BUILD_ROOT
 %post
 /sbin/chkconfig --add multipathd
 %service multipathd restart
+%systemd_post multipathd.service
 
 %preun
 if [ "$1" = "0" ]; then
 	%service multipathd stop
 	/sbin/chkconfig --del multipathd
 fi
+%systemd_preun multipathd.service
+
+%postun
+%systemd_reload
+
+%triggerpostun -- %{name} < 0.4.9-7
+%systemd_trigger multipathd.service
 
 %files
 %defattr(644,root,root,755)
 %doc AUTHOR ChangeLog FAQ README TODO
 %doc multipath.conf.{annotated,defaults,synthetic}
+%attr(755,root,root) %{_sbindir}/mpathpersist
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
 %attr(755,root,root) /%{_lib}/multipath/lib*.so
+%attr(755,root,root) /%{_lib}/libmpathpersist.so.0
 %attr(755,root,root) /%{_lib}/libmultipath.so.0
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
@@ -175,7 +187,9 @@ fi
 %dir %{_sysconfdir}/multipath
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
 /etc/udev/rules.d/multipath.rules
+%{systemdunitdir}/multipathd.service
 %{_mandir}/man5/multipath.conf.5*
+%{_mandir}/man8/mpathpersist.8*
 %{_mandir}/man8/multipath.8*
 %{_mandir}/man8/multipathd.8*
 
