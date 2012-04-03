@@ -2,8 +2,9 @@
 set -e
 # http://git.kernel.org/gitweb.cgi?p=linux/storage/multipath-tools/.git
 branch=master
-tag=tags/0.4.8
-url=http://kernel.org/pub/scm/linux/storage/multipath-tools/.git
+tag=tags/0.4.9
+#url=http://kernel.org/pub/scm/linux/storage/multipath-tools/.git
+url=http://git.opensvc.com/multipath-tools/.git
 pkg=multipath-tools
 out=$pkg-branch.diff
 
