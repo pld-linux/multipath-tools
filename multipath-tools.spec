@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.9
-Release:	8
+Release:	9
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -15,8 +15,6 @@ Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
 Source3:	%{name}-bindings
-Source4:	%{name}-initramfs-hooks
-Source5:	%{name}-initramfs-local-top
 URL:		http://christophe.varoqui.free.fr/
 Patch100:	%{name}-git.patch
 Patch0:		%{name}-llh.patch
@@ -96,21 +94,6 @@ multipath maps partionable.
 kpartx odwzorowuje liniowe mapy urządzeń na partycje urządzeń, co
 umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
-%package initramfs
-Summary:	Tools to manage multipathed devices with the device-mapper - support scripts for initramfs-tools
-Summary(pl.UTF-8):	Wielotrasowy dostęp do zasobów przy użyciu device-mappera - skrypty dla initramfs-tools
-Group:		Base
-Requires:	%{name} = %{version}-%{release}
-Requires:	initramfs-tools
-
-%description initramfs
-Tools to manage multipathed devices with the device-mapper - support
-scripts for initramfs-tools.
-
-%description initramfs -l pl.UTF-8
-Wielotrasowy dostęp do zasobów przy użyciu device-mappera - skrypty
-dla initramfs-tools.
-
 %prep
 %setup -qc
 %patch100 -p1
@@ -137,7 +120,7 @@ dla initramfs-tools.
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath,%{_datadir}/initramfs-tools/{hooks,scripts/local-top}}
+install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath}
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT
@@ -146,9 +129,6 @@ install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
 cp -a multipath.conf.defaults $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
 cp -a %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
 cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
-
-install -p %{SOURCE4} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/hooks/multipath
-install -p %{SOURCE5} $RPM_BUILD_ROOT%{_datadir}/initramfs-tools/scripts/local-top/multipath
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -201,8 +181,3 @@ fi
 %attr(755,root,root) /lib/udev/kpartx_id
 /etc/udev/rules.d/kpartx.rules
 %{_mandir}/man8/kpartx.8*
-
-%files initramfs
-%defattr(644,root,root,755)
-%attr(755,root,root) %{_datadir}/initramfs-tools/hooks/multipath
-%attr(755,root,root) %{_datadir}/initramfs-tools/scripts/local-top/multipath
