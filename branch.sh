@@ -1,12 +1,11 @@
 #!/bin/sh
 set -e
-# http://git.kernel.org/gitweb.cgi?p=linux/storage/multipath-tools/.git
+# http://git.opensvc.com/gitweb.cgi?p=multipath-tools/.git
 branch=master
 tag=tags/0.4.9
-#url=http://kernel.org/pub/scm/linux/storage/multipath-tools/.git
 url=http://git.opensvc.com/multipath-tools/.git
 pkg=multipath-tools
-out=$pkg-branch.diff
+out=$pkg-git.patch
 
 d=$-
 filter() {
@@ -16,11 +15,11 @@ filter() {
 	cat
 }
 
-if [ ! -d git ]; then
-	git clone $url git
+if [ ! -d $pkg ]; then
+	git clone $url $pkg
 fi
 
-cd git
+cd $pkg
 	git pull
 	git diff $tag..$branch | filter > ../$out.tmp
 cd ..
