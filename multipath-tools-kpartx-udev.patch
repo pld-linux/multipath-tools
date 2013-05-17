@@ -1,5 +1,5 @@
---- multipath-tools-0.4.8/kpartx/kpartx.rules~	2007-08-03 00:05:37.000000000 +0300
-+++ multipath-tools-0.4.8/kpartx/kpartx.rules	2007-10-26 01:16:10.000000000 +0300
+--- multipath-tools-0.4.9/kpartx/kpartx.rules~	2013-05-17 23:53:47.000000000 +0300
++++ multipath-tools-0.4.9/kpartx/kpartx.rules	2013-05-17 23:54:09.123094293 +0300
 @@ -7,6 +7,9 @@
  KERNEL!="dm-*", GOTO="kpartx_end"
  ACTION=="remove", GOTO="kpartx_end"
@@ -10,10 +10,10 @@
  ENV{DM_TABLE_STATE}!="LIVE", GOTO="kpartx_end"
  
  ENV{DM_UUID}=="?*", IMPORT{program}=="/lib/udev/kpartx_id %M %m $env{DM_UUID}"
-@@ -27,7 +30,7 @@
+@@ -36,7 +36,7 @@
  
  # Create dm tables for partitions
- ENV{DM_STATE}=="ACTIVE", ENV{DM_UUID}=="mpath-*", \
+ ENV{DM_STATE}!="SUSPENDED", ENV{DM_UUID}=="mpath-*", \
 -        RUN+="/sbin/kpartx -u -p -part /dev/$name"
 +        RUN+="/sbin/kpartx -u /dev/$name"
  

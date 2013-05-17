@@ -6,7 +6,7 @@ Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
 Version:	0.4.9
-Release:	9
+Release:	10
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
@@ -17,7 +17,6 @@ Source2:	multipathd.sysconfig
 Source3:	%{name}-bindings
 URL:		http://christophe.varoqui.free.fr/
 Patch100:	%{name}-git.patch
-Patch0:		%{name}-llh.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
 BuildRequires:	device-mapper-devel >= 1.02.08
@@ -97,7 +96,6 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %prep
 %setup -qc
 %patch100 -p1
-%patch0 -p1
 %patch1 -p1
 %patch2 -p1
 
@@ -126,9 +124,15 @@ install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath
 	DESTDIR=$RPM_BUILD_ROOT
 
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
-cp -a multipath.conf.defaults $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
-cp -a %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
-cp -a %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
+cp -p multipath.conf.defaults $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
+cp -p %{SOURCE2} $RPM_BUILD_ROOT/etc/sysconfig/multipathd
+cp -p %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
+
+# no -devel, so remove
+%{__rm} $RPM_BUILD_ROOT%{_includedir}/mpath_persist.h
+%{__rm} $RPM_BUILD_ROOT%{_mandir}/man3/mpath_persistent_reserve_in.3*
+%{__rm} $RPM_BUILD_ROOT%{_mandir}/man3/mpath_persistent_reserve_out.3*
+%{__rm} $RPM_BUILD_ROOT/%{_lib}/libmpathpersist.so
 
 %clean
 rm -rf $RPM_BUILD_ROOT
@@ -167,7 +171,6 @@ fi
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
 %dir %{_sysconfdir}/multipath
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
-/etc/udev/rules.d/multipath.rules
 %{systemdunitdir}/multipathd.service
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/mpathpersist.8*

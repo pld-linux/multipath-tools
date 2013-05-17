@@ -1,41 +1,29 @@
---- multipath-tools-0.4.8/multipath.conf.defaults~	2009-10-26 17:17:11.000000000 +0200
-+++ multipath-tools-0.4.8/multipath.conf.defaults	2009-10-29 14:43:54.217124402 +0200
+--- multipath-tools-0.4.9/multipath.conf.defaults~	2013-05-18 00:16:15.000000000 +0300
++++ multipath-tools-0.4.9/multipath.conf.defaults	2013-05-18 00:17:20.615348580 +0300
 @@ -1,7 +1,7 @@
  # These are the compiled in default settings.  They will be used unless you
  # overwrite these values in your config file.
- 
+  
 -#defaults {
 +defaults {
- #	udev_dir		/dev
- #	polling_interval	5
- #	selector		"round-robin 0"
-@@ -13,16 +13,16 @@
- #	rr_weight		uniform
- #	failback		manual
- #	no_path_retry		fail
--#	user_friendly_names	no
+ #	verbosity 2
+ #	polling_interval 5
+ #	path_selector "service-time 0"
+@@ -19,14 +19,15 @@
+ #	queue_without_daemon "yes"
+ #	pg_timeout "none"
+ #	flush_on_last_del "no"
+-#	user_friendly_names "no"
++	user_friendly_names "yes"
+ #	fast_io_fail_tmo 5
+ #	bindings_file "/etc/multipath/bindings"
+ #	wwids_file /etc/multipath/wwids
+ #	log_checker_err always
+ #	retain_attached_hw_handler no
+ #	detect_prio no
 -#}
--#
--#blacklist {
-+	user_friendly_names	yes
 +}
 +
-+blacklist {
- #	devnode	"^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
- #	devnode	"^hd[a-z]"
- #	devnode	"^dcssblk[0-9]*"
--#}
--#
--#devices {
-+}
-+
-+devices {
- #	device {
- #		vendor			"APPLE*"
- #		product			"Xserve RAID"
-@@ -571,4 +571,4 @@
- #		path_checker		rdac
- #		prio			rdac
- #	}
--#}
-+}
+ #blacklist {
+ #	devnode "^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
+ #	devnode "^hd[a-z]"
