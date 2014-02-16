@@ -5,20 +5,20 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.4.9
-Release:	10
+Version:	0.5.0
+Release:	1
 License:	GPL v2
 Group:		Base
 Source0:	http://christophe.varoqui.free.fr/multipath-tools/%{name}-%{version}.tar.bz2
-# Source0-md5:	a6d4b48afc28f1f50f5ee4b1b06d2765
+# Source0-md5:	faf261d4cc717bf4c979557dc7bf5f52
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
 Source3:	%{name}-bindings
-URL:		http://christophe.varoqui.free.fr/
-Patch100:	%{name}-git.patch
+Patch0:		%{name}-format.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
+URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
@@ -26,6 +26,8 @@ BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
 BuildRequires:	sysfsutils-devel >= 2.0.0
+BuildRequires:	systemd-devel
+BuildRequires:	udev-devel
 %if %{with initrd}
 BuildRequires:	device-mapper-initrd-devel
 BuildRequires:	klibc-static
@@ -94,8 +96,8 @@ kpartx odwzorowuje liniowe mapy urządzeń na partycje urządzeń, co
 umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
 %prep
-%setup -qc
-%patch100 -p1
+%setup -q
+%patch0 -p1
 %patch1 -p1
 %patch2 -p1
 
@@ -121,7 +123,8 @@ rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath}
 
 %{__make} install \
-	DESTDIR=$RPM_BUILD_ROOT
+	DESTDIR=$RPM_BUILD_ROOT \
+	unitdir=%{systemdunitdir}
 
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
 cp -p multipath.conf.defaults $RPM_BUILD_ROOT%{_sysconfdir}/multipath.conf
@@ -172,6 +175,7 @@ fi
 %dir %{_sysconfdir}/multipath
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath/bindings
 %{systemdunitdir}/multipathd.service
+%{systemdunitdir}/multipathd.socket
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/mpathpersist.8*
 %{_mandir}/man8/multipath.8*
