@@ -115,6 +115,7 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %endif
 
 %{__make} -j1 \
+	LIB=%{_lib} \
 	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
 	CC="%{__cc}"
 
@@ -124,6 +125,7 @@ install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT \
+	LIB=%{_lib} \
 	unitdir=%{systemdunitdir}
 
 install -p %{SOURCE1} $RPM_BUILD_ROOT/etc/rc.d/init.d/multipathd
