@@ -36,7 +36,7 @@ stop() {
 
 	# Stop daemons.
 	msg_stopping "multipath daemon"
-	killproc --pidfile multipathd.pid multipathd -TERM
+	killproc --pidfile multipathd.pid --waitforname multipathd --waitfortime 300 multipathd -TERM
 	rm -f /var/lock/subsys/multipathd
 }
 
