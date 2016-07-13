@@ -1,5 +1,5 @@
---- multipath-tools-0.4.9/multipath.conf.defaults~	2013-05-18 00:16:15.000000000 +0300
-+++ multipath-tools-0.4.9/multipath.conf.defaults	2013-05-18 00:17:20.615348580 +0300
+--- multipath-tools-ec56ef2/multipath.conf.defaults.orig	2016-07-04 21:59:34.807391991 +0200
++++ multipath-tools-ec56ef2/multipath.conf.defaults	2016-07-12 21:42:09.514710239 +0200
 @@ -1,7 +1,7 @@
  # These are the compiled in default settings.  They will be used unless you
  # overwrite these values in your config file.
@@ -9,21 +9,22 @@
  #	verbosity 2
  #	polling_interval 5
  #	path_selector "service-time 0"
-@@ -19,14 +19,15 @@
+@@ -19,7 +19,7 @@
+ #	rr_weight "uniform"
  #	queue_without_daemon "yes"
- #	pg_timeout "none"
  #	flush_on_last_del "no"
 -#	user_friendly_names "no"
 +	user_friendly_names "yes"
  #	fast_io_fail_tmo 5
  #	bindings_file "/etc/multipath/bindings"
  #	wwids_file /etc/multipath/wwids
- #	log_checker_err always
- #	retain_attached_hw_handler no
- #	detect_prio no
+@@ -30,7 +30,8 @@
+ #	delay_watch_checks no
+ #	delay_wait_checks no
+ #	missing_uev_wait_timeout 30
 -#}
 +}
 +
  #blacklist {
  #	devnode "^(ram|raw|loop|fd|md|dm-|sr|scd|st)[0-9]*"
- #	devnode "^hd[a-z]"
+ #	devnode "^(td|hd|vd)[a-z]"

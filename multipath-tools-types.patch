@@ -1,0 +1,11 @@
+--- multipath-tools-ec56ef2/multipathd/cli.c.orig	2016-05-10 08:12:35.000000000 +0200
++++ multipath-tools-ec56ef2/multipathd/cli.c	2016-07-04 20:34:08.698495842 +0200
+@@ -109,7 +109,7 @@
+ }
+ 
+ int
+-set_unlocked_handler_callback (unsigned long fp,int (*fn)(void *, char **, int *, void *))
++set_unlocked_handler_callback (uint64_t fp,int (*fn)(void *, char **, int *, void *))
+ {
+ 	struct handler * h = find_handler(fp);
+ 
