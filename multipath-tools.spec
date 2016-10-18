@@ -7,7 +7,7 @@ Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyci
 Name:		multipath-tools
 Version:	0.6.1
 %define	gitref	ec56ef2
-Release:	1
+Release:	2
 License:	GPL v2
 Group:		Base
 # http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=ec56ef2052a9ba1e0fde301cd808452b2ac1a097;sf=tgz
