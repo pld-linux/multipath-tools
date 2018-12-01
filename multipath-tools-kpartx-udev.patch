@@ -1,21 +1,20 @@
---- multipath-tools-0.4.9/kpartx/kpartx.rules~	2013-05-17 23:53:47.000000000 +0300
-+++ multipath-tools-0.4.9/kpartx/kpartx.rules	2013-05-17 23:54:09.123094293 +0300
-@@ -7,6 +7,9 @@
- KERNEL!="dm-*", GOTO="kpartx_end"
- ACTION=="remove", GOTO="kpartx_end"
+--- multipath-tools-0.7.9-5c67a8b/kpartx/kpartx.rules.orig	2018-12-01 21:57:01.880902692 +0100
++++ multipath-tools-0.7.9-5c67a8b/kpartx/kpartx.rules	2018-12-01 22:00:00.727567315 +0100
+@@ -8,6 +8,9 @@
+ ACTION!="add|change", GOTO="kpartx_end"
+ ENV{DM_UUID}!="?*", GOTO="kpartx_end"
  
 +IMPORT{program}="/sbin/dmsetup export -j%M -m%m"
 +ENV{DM_NAME}!="?*", GOTO="kpartx_end"
 +
- ENV{DM_TABLE_STATE}!="LIVE", GOTO="kpartx_end"
+ # Create dm tables for partitions on multipath devices.
+ ENV{DM_UUID}!="mpath-?*", GOTO="mpath_kpartx_end"
  
- ENV{DM_UUID}=="?*", IMPORT{program}=="/lib/udev/kpartx_id %M %m $env{DM_UUID}"
-@@ -36,7 +36,7 @@
+@@ -32,6 +35,6 @@
+ GOTO="kpartx_end"
  
- # Create dm tables for partitions
- ENV{DM_STATE}!="SUSPENDED", ENV{DM_UUID}=="mpath-*", \
--        RUN+="/sbin/kpartx -u -p -part /dev/$name"
-+        RUN+="/sbin/kpartx -u /dev/$name"
+ LABEL="run_kpartx"
+-RUN+="/sbin/kpartx -un -p -part /dev/$name"
++RUN+="/sbin/kpartx -un /dev/$name"
  
  LABEL="kpartx_end"
- 
