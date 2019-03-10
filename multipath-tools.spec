@@ -5,14 +5,14 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.7.9
-%define	gitref	5c67a8b
+Version:	0.8.0
+%define	gitref	eb688e1
 Release:	1
 License:	GPL v2
 Group:		Base
 # http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{gitref};sf=tgz
 Source0:	http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{version};sf=tgz;fakeout=/%{name}-%{version}.tar.gz
-# Source0-md5:	c5606ce834a3e5795c7ae8b12eb52db9
+# Source0-md5:	af06190a0d167e8a4d11faa6919d60f9
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -22,6 +22,7 @@ Source4:	multipath.conf.defaults
 Patch0:		%{name}-paths.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
+Patch3:		%{name}-systemd.patch
 URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	libaio-devel
@@ -29,7 +30,7 @@ BuildRequires:	linux-libc-headers >= 2.6.12.0-5
 BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
-BuildRequires:	systemd-devel
+BuildRequires:	systemd-devel >= 1:209
 BuildRequires:	udev-devel
 %if %{with initrd}
 BuildRequires:	device-mapper-initrd-devel
@@ -130,6 +131,7 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %patch1 -p1
 cp -p %{SOURCE4} .
 %patch2 -p1
+%patch3 -p1
 
 %build
 %if %{with initrd}
