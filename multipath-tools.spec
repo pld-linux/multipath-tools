@@ -47,9 +47,6 @@ Requires:	systemd-units >= 38
 %if "%{pld_release}" == "th"
 Requires:	udev-core >= 1:127
 %endif
-%if "%{pld_release}" == "ti"
-Conflicts:	udev < 1:124-3
-%endif
 %if "%{pld_release}" == "ac"
 Requires:	udev-core >= 1:079-10
 %endif
@@ -109,9 +106,6 @@ Group:		Base
 Requires:	device-mapper-libs >= 1.02.08
 %if "%{pld_release}" == "th"
 Conflicts:	udev-core < 1:127
-%endif
-%if "%{pld_release}" == "ti"
-Conflicts:	udev-core < 1:124-3
 %endif
 %if "%{pld_release}" == "ac"
 Conflicts:	udev-core < 1:079-10
