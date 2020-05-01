@@ -7,7 +7,7 @@ Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyci
 Name:		multipath-tools
 Version:	0.8.3
 %define	gitref	6c3bd36
-Release:	1
+Release:	2
 License:	GPL v2
 Group:		Base
 # http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{gitref};sf=tgz
@@ -22,15 +22,19 @@ Source4:	multipath.conf.defaults
 Patch0:		%{name}-paths.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
+Patch3:		%{name}-json-c.patch
 URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
+BuildRequires:	json-c-devel
 BuildRequires:	libaio-devel
 BuildRequires:	linux-libc-headers >= 2.6.12.0-5
+BuildRequires:	pkgconfig
 BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
 BuildRequires:	systemd-devel >= 1:209
 BuildRequires:	udev-devel
+BuildRequires:	userspace-rcu-devel
 %if %{with initrd}
 BuildRequires:	device-mapper-initrd-devel
 BuildRequires:	klibc-static
@@ -124,6 +128,7 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 %patch1 -p1
 cp -p %{SOURCE4} .
 %patch2 -p1
+%patch3 -p1
 
 %build
 %if %{with initrd}
