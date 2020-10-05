@@ -5,14 +5,14 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.8.3
-%define	gitref	6c3bd36
-Release:	2
+Version:	0.8.4
+%define	gitref	d491591
+Release:	1
 License:	GPL v2
 Group:		Base
 # http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{gitref};sf=tgz
 Source0:	http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{version};sf=tgz;fakeout=/%{name}-%{version}.tar.gz
-# Source0-md5:	0b93f9fab48c72e4d3f91ef9d54236d2
+# Source0-md5:	034a3dfa9687df08bc12043c3833c017
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -150,7 +150,7 @@ cp -p %{SOURCE4} .
 
 %install
 rm -rf $RPM_BUILD_ROOT
-install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath}
+install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath,/%{_lib}/multipath}
 
 %{__make} install \
 	DESTDIR=$RPM_BUILD_ROOT \
