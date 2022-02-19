@@ -5,14 +5,13 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.8.4
-%define	gitref	d491591
-Release:	2
+Version:	0.8.8
+Release:	1
 License:	GPL v2
 Group:		Base
-# http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{gitref};sf=tgz
-Source0:	http://git.opensvc.com/?p=multipath-tools/.git;a=snapshot;h=%{version};sf=tgz;fakeout=/%{name}-%{version}.tar.gz
-# Source0-md5:	034a3dfa9687df08bc12043c3833c017
+#Source0Download: https://github.com/opensvc/multipath-tools/tags
+Source0:	https://github.com/opensvc/multipath-tools/archive/%{version}/%{name}-%{version}.tar.gz
+# Source0-md5:	57fa8b8c38802ed5d69c01155cad8d31
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -22,7 +21,7 @@ Source4:	multipath.conf.defaults
 Patch0:		%{name}-paths.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
-Patch3:		%{name}-json-c.patch
+Patch3:		%{name}-prototype.patch
 URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	json-c-devel
@@ -123,7 +122,7 @@ kpartx odwzorowuje liniowe mapy urządzeń na partycje urządzeń, co
 umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 
 %prep
-%setup -q -n %{name}-%{version}-%{gitref}
+%setup -q
 %patch0 -p1
 %patch1 -p1
 cp -p %{SOURCE4} .
@@ -166,9 +165,10 @@ cp -p %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
 # devel files in /usr
 install -d $RPM_BUILD_ROOT%{_libdir}
-%{__rm} $RPM_BUILD_ROOT/%{_lib}/{libmpathcmd,libmpathpersist,libmultipath}.so
+%{__rm} $RPM_BUILD_ROOT/%{_lib}/{libmpathcmd,libmpathpersist,libmpathvalid,libmultipath}.so
 ln -sf /%{_lib}/libmpathpersist.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathpersist.so
 ln -sf /%{_lib}/libmpathcmd.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathcmd.so
+ln -sf /%{_lib}/libmpathvalid.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathvalid.so
 ln -sf /%{_lib}/libmultipath.so.0 $RPM_BUILD_ROOT%{_libdir}/libmultipath.so
 
 %clean
@@ -197,7 +197,7 @@ fi
 
 %files
 %defattr(644,root,root,755)
-%doc README README.alua multipath.conf.defaults
+%doc README.alua README.md multipath.conf.defaults
 %attr(755,root,root) %{_sbindir}/mpathpersist
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
@@ -222,6 +222,7 @@ fi
 %defattr(644,root,root,755)
 %attr(755,root,root) /%{_lib}/libmpathcmd.so.0
 %attr(755,root,root) /%{_lib}/libmpathpersist.so.0
+%attr(755,root,root) /%{_lib}/libmpathvalid.so.0
 %attr(755,root,root) /%{_lib}/libmultipath.so.0
 %attr(755,root,root) %{_libdir}/libdmmp.so.0.2.0
 
@@ -230,10 +231,12 @@ fi
 %attr(755,root,root) %{_libdir}/libdmmp.so
 %attr(755,root,root) %{_libdir}/libmpathcmd.so
 %attr(755,root,root) %{_libdir}/libmpathpersist.so
+%attr(755,root,root) %{_libdir}/libmpathvalid.so
 %attr(755,root,root) %{_libdir}/libmultipath.so
 %{_includedir}/libdmmp
 %{_includedir}/mpath_cmd.h
 %{_includedir}/mpath_persist.h
+%{_includedir}/mpath_valid.h
 %{_pkgconfigdir}/libdmmp.pc
 %{_mandir}/man3/dmmp_*.3*
 %{_mandir}/man3/libdmmp.h.3*
