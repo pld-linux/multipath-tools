@@ -22,6 +22,7 @@ Patch0:		%{name}-paths.patch
 Patch1:		%{name}-kpartx-udev.patch
 Patch2:		config.patch
 Patch3:		%{name}-prototype.patch
+Patch4:		%{name}-types.patch
 URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	json-c-devel
@@ -128,6 +129,7 @@ umożliwia tworzenie partycji na odwzorowaniach wielotrasowych.
 cp -p %{SOURCE4} .
 %patch2 -p1
 %patch3 -p1
+%patch4 -p1
 
 %build
 %if %{with initrd}

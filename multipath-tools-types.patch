@@ -1,0 +1,82 @@
+--- multipath-tools-0.8.8/libmultipath/devmapper.c.orig	2021-12-06 07:42:30.000000000 +0100
++++ multipath-tools-0.8.8/libmultipath/devmapper.c	2022-02-19 20:40:40.825543851 +0100
+@@ -114,7 +114,7 @@ dm_write_log (int level, const char *fil
+ 
+ 			get_monotonic_time(&ts);
+ 			safe_sprintf(buff, "%ld.%06ld",
+-				     (long)ts.tv_sec, ts.tv_nsec/1000);
++				     (long)ts.tv_sec, (long)(ts.tv_nsec/1000));
+ 			fprintf(stderr, "%s | ", buff);
+ 		}
+ 		fprintf(stderr, "libdevmapper: %s(%i): ", file, line);
+--- multipath-tools-0.8.8/libmultipath/debug.c.orig	2021-12-06 07:42:30.000000000 +0100
++++ multipath-tools-0.8.8/libmultipath/debug.c	2022-02-19 20:41:56.899486226 +0100
+@@ -33,7 +33,7 @@ void dlog(int prio, const char * fmt, ..
+ 			get_monotonic_time(&ts);
+ 			safe_sprintf(buff, "%ld.%06ld",
+ 				     (long)ts.tv_sec,
+-				     ts.tv_nsec/1000);
++				     (long)(ts.tv_nsec/1000));
+ 			fprintf(stderr, "%s | ", buff);
+ 		}
+ 		vfprintf(stderr, fmt, ap);
+--- multipath-tools-0.8.8/multipath/main.c.orig	2021-12-06 07:42:30.000000000 +0100
++++ multipath-tools-0.8.8/multipath/main.c	2022-02-19 20:45:59.058702293 +0100
+@@ -414,7 +414,7 @@ static int print_cmd_valid(int k, const
+ 		wait = find_multipaths_check_timeout(pp, 0, &until);
+ 	if (wait == FIND_MULTIPATHS_WAITING)
+ 		printf("FIND_MULTIPATHS_WAIT_UNTIL=\"%ld.%06ld\"\n",
+-		       (long)until.tv_sec, until.tv_nsec/1000);
++		       (long)until.tv_sec, (long)(until.tv_nsec/1000));
+ 	else if (wait == FIND_MULTIPATHS_WAIT_DONE)
+ 		printf("FIND_MULTIPATHS_WAIT_UNTIL=\"0\"\n");
+ 	printf("DM_MULTIPATH_DEVICE_PATH=\"%d\"\n",
+--- multipath-tools-0.8.8/multipathd/main.c.orig	2021-12-06 07:42:30.000000000 +0100
++++ multipath-tools-0.8.8/multipathd/main.c	2022-02-19 20:56:29.801390068 +0100
+@@ -2550,7 +2550,7 @@ checkerloop (void *ap)
+ 		if (start_time.tv_sec && last_time.tv_sec) {
+ 			timespecsub(&start_time, &last_time, &diff_time);
+ 			condlog(4, "tick (%ld.%06lu secs)",
+-				(long)diff_time.tv_sec, diff_time.tv_nsec / 1000);
++				(long)diff_time.tv_sec, (unsigned long)(diff_time.tv_nsec / 1000));
+ 			last_time = start_time;
+ 			ticks = diff_time.tv_sec;
+ 		} else {
+@@ -2610,7 +2610,7 @@ checkerloop (void *ap)
+ 				condlog(4, "checked %d path%s in %ld.%06lu secs",
+ 					num_paths, num_paths > 1 ? "s" : "",
+ 					(long)diff_time.tv_sec,
+-					diff_time.tv_nsec / 1000);
++					(unsigned long)(diff_time.tv_nsec / 1000));
+ 				conf = get_multipath_config();
+ 				max_checkint = conf->max_checkint;
+ 				put_multipath_config(conf);
+@@ -2646,7 +2646,7 @@ checkerloop (void *ap)
+ 
+ 			condlog(3, "waiting for %ld.%06lu secs",
+ 				(long)diff_time.tv_sec,
+-				diff_time.tv_nsec / 1000);
++				(unsigned long)(diff_time.tv_nsec / 1000));
+ 			if (nanosleep(&diff_time, NULL) != 0) {
+ 				condlog(3, "nanosleep failed with error %d",
+ 					errno);
+--- multipath-tools-0.8.8/multipathd/uxlsnr.c.orig	2021-12-06 07:42:30.000000000 +0100
++++ multipath-tools-0.8.8/multipathd/uxlsnr.c	2022-02-19 21:37:35.819193624 +0100
+@@ -318,7 +318,7 @@ static struct timespec *get_soonest_time
+ 		*ts = ts_zero;
+ 
+ 	condlog(4, "%s: next client expires in %ld.%03lds", __func__,
+-		(long)ts->tv_sec, ts->tv_nsec / 1000000);
++		(long)ts->tv_sec, (long)(ts->tv_nsec / 1000000));
+ 	return ts;
+ }
+ 
+@@ -575,7 +575,7 @@ static void check_timeout(struct client
+ 		return;
+ 
+ 	condlog(2, "%s: cli[%d]: timed out at %ld.%03ld", __func__,
+-		c->fd, (long)c->expires.tv_sec, c->expires.tv_nsec / 1000000);
++		c->fd, (long)c->expires.tv_sec, (long)(c->expires.tv_nsec / 1000000));
+ 
+ 	c->error = -ETIMEDOUT;
+ 	set_client_state(c, CLT_SEND);
