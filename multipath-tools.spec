@@ -47,12 +47,7 @@ Requires:	kpartx = %{version}-%{release}
 Requires:	libaio >= 0.3.106-2
 Requires:	rc-scripts
 Requires:	systemd-units >= 38
-%if "%{pld_release}" == "th"
 Requires:	udev-core >= 1:127
-%endif
-%if "%{pld_release}" == "ac"
-Requires:	udev-core >= 1:079-10
-%endif
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		skip_post_check_so	libmultipath.so.0 libmpathpersist.so.0
@@ -107,12 +102,7 @@ Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
 Requires:	device-mapper-libs >= 1.02.08
-%if "%{pld_release}" == "th"
 Conflicts:	udev-core < 1:127
-%endif
-%if "%{pld_release}" == "ac"
-Conflicts:	udev-core < 1:079-10
-%endif
 
 %description -n kpartx
 kpartx maps linear devmaps upon device partitions, which makes
