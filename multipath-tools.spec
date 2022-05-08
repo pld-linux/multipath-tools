@@ -5,13 +5,13 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.8.8
+Version:	0.8.9
 Release:	1
 License:	GPL v2
 Group:		Base
 #Source0Download: https://github.com/opensvc/multipath-tools/tags
 Source0:	https://github.com/opensvc/multipath-tools/archive/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	57fa8b8c38802ed5d69c01155cad8d31
+# Source0-md5:	deb447e23b5ecaf87928ec396c75f1e9
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -204,7 +204,9 @@ fi
 %attr(755,root,root) %{_sbindir}/multipath
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
-%attr(755,root,root) /%{_lib}/multipath/lib*.so
+%attr(755,root,root) /%{_lib}/multipath/libcheck*.so
+%attr(755,root,root) /%{_lib}/multipath/libforeign-nvme.so
+%attr(755,root,root) /%{_lib}/multipath/libprio*.so
 %attr(754,root,root) /etc/rc.d/init.d/multipathd
 %config(noreplace) %verify(not md5 mtime size) /etc/sysconfig/multipathd
 %config(noreplace) %verify(not md5 mtime size) %{_sysconfdir}/multipath.conf
@@ -213,6 +215,8 @@ fi
 /lib/udev/rules.d/11-dm-mpath.rules
 /lib/udev/rules.d/11-dm-parts.rules
 /lib/udev/rules.d/56-multipath.rules
+# TODO: package for systemd?
+#/usr/lib/modules-load.d/multipath.conf
 %{systemdunitdir}/multipathd.service
 %{systemdunitdir}/multipathd.socket
 %{_mandir}/man5/multipath.conf.5*
