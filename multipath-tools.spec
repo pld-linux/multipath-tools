@@ -27,7 +27,7 @@ URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	json-c-devel
 BuildRequires:	libaio-devel
-BuildRequires:	linux-libc-headers >= 2.6.12.0-5
+BuildRequires:	linux-libc-headers >= 7:2.6.12.0-5
 BuildRequires:	pkgconfig
 BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
