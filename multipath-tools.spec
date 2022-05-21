@@ -143,7 +143,7 @@ cp -p %{SOURCE4} .
 rm -rf $RPM_BUILD_ROOT
 install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath,/%{_lib}/multipath}
 
-%{__make} install \
+%{__make} -j1 install \
 	DESTDIR=$RPM_BUILD_ROOT \
 	LIB=%{_lib} \
 	libudevdir=/lib/udev \
