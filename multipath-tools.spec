@@ -5,13 +5,13 @@
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.8.9
+Version:	0.9.5
 Release:	1
 License:	GPL v2
 Group:		Base
 #Source0Download: https://github.com/opensvc/multipath-tools/tags
 Source0:	https://github.com/opensvc/multipath-tools/archive/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	deb447e23b5ecaf87928ec396c75f1e9
+# Source0-md5:	4a2bb51973e962d653578063a6da14e9
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -50,7 +50,6 @@ Requires:	systemd-units >= 38
 Requires:	udev-core >= 1:127
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
-%define		skip_post_check_so	libmultipath.so.0 libmpathpersist.so.0
 %define		_sbindir	/sbin
 
 %description
@@ -135,9 +134,10 @@ cp -p %{SOURCE4} .
 %endif
 
 %{__make} -j1 \
+	CC="%{__cc}" \
 	LIB=%{_lib} \
 	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
-	CC="%{__cc}"
+	V=1
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -146,6 +146,7 @@ install -d $RPM_BUILD_ROOT{/etc/{rc.d/init.d,sysconfig},%{_sysconfdir}/multipath
 %{__make} -j1 install \
 	DESTDIR=$RPM_BUILD_ROOT \
 	LIB=%{_lib} \
+	V=1 \
 	libudevdir=/lib/udev \
 	unitdir=%{systemdunitdir} \
 	usr_prefix=%{_prefix}
@@ -157,9 +158,10 @@ cp -p %{SOURCE3} $RPM_BUILD_ROOT%{_sysconfdir}/multipath/bindings
 
 # devel files in /usr
 install -d $RPM_BUILD_ROOT%{_libdir}
-%{__rm} $RPM_BUILD_ROOT/%{_lib}/{libmpathcmd,libmpathpersist,libmpathvalid,libmultipath}.so
+%{__rm} $RPM_BUILD_ROOT/%{_lib}/{libmpathcmd,libmpathpersist,libmpathutil,libmpathvalid,libmultipath}.so
 ln -sf /%{_lib}/libmpathpersist.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathpersist.so
 ln -sf /%{_lib}/libmpathcmd.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathcmd.so
+ln -sf /%{_lib}/libmpathutil.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathutil.so
 ln -sf /%{_lib}/libmpathvalid.so.0 $RPM_BUILD_ROOT%{_libdir}/libmpathvalid.so
 ln -sf /%{_lib}/libmultipath.so.0 $RPM_BUILD_ROOT%{_libdir}/libmultipath.so
 
@@ -189,9 +191,10 @@ fi
 
 %files
 %defattr(644,root,root,755)
-%doc README.alua README.md multipath.conf.defaults
+%doc README.md multipath.conf.defaults
 %attr(755,root,root) %{_sbindir}/mpathpersist
 %attr(755,root,root) %{_sbindir}/multipath
+%attr(755,root,root) %{_sbindir}/multipathc
 %attr(755,root,root) %{_sbindir}/multipathd
 %dir /%{_lib}/multipath
 %attr(755,root,root) /%{_lib}/multipath/libcheck*.so
@@ -209,15 +212,18 @@ fi
 #/usr/lib/modules-load.d/multipath.conf
 %{systemdunitdir}/multipathd.service
 %{systemdunitdir}/multipathd.socket
+%{systemdtmpfilesdir}/multipath.conf
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/mpathpersist.8*
 %{_mandir}/man8/multipath.8*
+%{_mandir}/man8/multipathc.8*
 %{_mandir}/man8/multipathd.8*
 
 %files libs
 %defattr(644,root,root,755)
 %attr(755,root,root) /%{_lib}/libmpathcmd.so.0
 %attr(755,root,root) /%{_lib}/libmpathpersist.so.0
+%attr(755,root,root) /%{_lib}/libmpathutil.so.0
 %attr(755,root,root) /%{_lib}/libmpathvalid.so.0
 %attr(755,root,root) /%{_lib}/libmultipath.so.0
 %attr(755,root,root) %{_libdir}/libdmmp.so.0.2.0
@@ -227,6 +233,7 @@ fi
 %attr(755,root,root) %{_libdir}/libdmmp.so
 %attr(755,root,root) %{_libdir}/libmpathcmd.so
 %attr(755,root,root) %{_libdir}/libmpathpersist.so
+%attr(755,root,root) %{_libdir}/libmpathutil.so
 %attr(755,root,root) %{_libdir}/libmpathvalid.so
 %attr(755,root,root) %{_libdir}/libmultipath.so
 %{_includedir}/libdmmp
