@@ -1,6 +1,7 @@
 #
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
+%bcond_with	systemd		# systemd
 
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
@@ -32,7 +33,7 @@ BuildRequires:	pkgconfig
 BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
-BuildRequires:	systemd-devel >= 1:209
+%{?with_systemd:BuildRequires:	systemd-devel >= 1:209}
 BuildRequires:	udev-devel
 BuildRequires:	userspace-rcu-devel
 %if %{with initrd}
@@ -210,8 +211,10 @@ fi
 /lib/udev/rules.d/56-multipath.rules
 # TODO: package for systemd?
 #/usr/lib/modules-load.d/multipath.conf
+%if %{with systemd}
 %{systemdunitdir}/multipathd.service
 %{systemdunitdir}/multipathd.socket
+%endif
 %{systemdtmpfilesdir}/multipath.conf
 %{_mandir}/man5/multipath.conf.5*
 %{_mandir}/man8/mpathpersist.8*
