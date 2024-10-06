@@ -8,9 +8,9 @@
 +	RUN+="/sbin/partx -d --nr 1-1024 $env{DEVNAME}"
  
  LABEL="end_del_part_nodes"
---- multipath-tools-0.7.9-5c67a8b/multipath/11-dm-mpath.rules.orig	2018-11-14 08:37:05.000000000 +0100
-+++ multipath-tools-0.7.9-5c67a8b/multipath/11-dm-mpath.rules	2018-12-01 21:53:03.777572075 +0100
-@@ -101,7 +101,7 @@
+--- multipath-tools-0.10.0/multipath/11-dm-mpath.rules.in.orig	2024-08-27 02:48:08.000000000 +0200
++++ multipath-tools-0.10.0/multipath/11-dm-mpath.rules.in	2024-10-06 08:58:41.853155098 +0200
+@@ -157,7 +157,7 @@ ENV{DM_UDEV_LOW_PRIORITY_FLAG}!="1", OPT
  
  # kpartx_id is very robust, it works for suspended maps and maps
  # with 0 dependencies. It sets DM_TYPE, DM_PART, DM_WWN
@@ -19,31 +19,31 @@
  	IMPORT{program}=="kpartx_id %M %m $env{DM_UUID}"
  
  ENV{DM_TYPE}=="?*", ENV{DM_SERIAL}=="?*", \
---- multipath-tools-0.9.5/multipath/multipath.rules.in.orig	2023-04-06 08:47:48.000000000 +0200
-+++ multipath-tools-0.9.5/multipath/multipath.rules.in	2023-07-19 18:36:02.578378364 +0200
+--- multipath-tools-0.10.0/multipath/multipath.rules.in.orig	2024-10-06 08:59:02.376377247 +0200
++++ multipath-tools-0.10.0/multipath/multipath.rules.in	2024-10-06 09:03:42.348193843 +0200
 @@ -2,7 +2,7 @@
  SUBSYSTEM!="block", GOTO="end_mpath"
  KERNEL!="sd*|dasd*|nvme*", GOTO="end_mpath"
  ACTION=="remove", TEST=="@RUNTIME_DIR@/multipath/find_multipaths/$major:$minor", \
--	RUN+="/usr/bin/rm -f @RUNTIME_DIR@/multipath/find_multipaths/$major:$minor"
+-	RUN+="@SYSDIR_BIN@/rm -f @RUNTIME_DIR@/multipath/find_multipaths/$major:$minor"
 +	RUN+="/bin/rm -f @RUNTIME_DIR@/multipath/find_multipaths/$major:$minor"
  ACTION!="add|change", GOTO="end_mpath"
  
  IMPORT{cmdline}="nompath"
-@@ -72,7 +72,7 @@ ENV{.SAVED_FM_WAIT_UNTIL}=="?*", GOTO="p
+@@ -69,7 +69,7 @@ ENV{.SAVED_FM_WAIT_UNTIL}=="?*", GOTO="p
  #
  # We must trigger an "add" event because LVM2 will only act on those.
  
--RUN+="/usr/bin/systemd-run --unit=cancel-multipath-wait-$kernel --description 'cancel waiting for multipath siblings of $kernel' --no-block --timer-property DefaultDependencies=no --timer-property Conflicts=shutdown.target --timer-property Before=shutdown.target --timer-property Conflicts=initrd-cleanup.service --timer-property Before=initrd-cleanup.service --timer-property AccuracySec=500ms --property DefaultDependencies=no --property Conflicts=shutdown.target --property Before=shutdown.target --property Conflicts=initrd-cleanup.service --property Before=initrd-cleanup.service --on-active=$env{FIND_MULTIPATHS_WAIT_UNTIL} /usr/bin/udevadm trigger --action=add $sys$devpath"
+-RUN+="@SYSDIR_BIN@/systemd-run --unit=cancel-multipath-wait-$kernel --description 'cancel waiting for multipath siblings of $kernel' --no-block --timer-property DefaultDependencies=no --timer-property Conflicts=shutdown.target --timer-property Before=shutdown.target --timer-property Conflicts=initrd-cleanup.service --timer-property Before=initrd-cleanup.service --timer-property AccuracySec=500ms --property DefaultDependencies=no --property Conflicts=shutdown.target --property Before=shutdown.target --property Conflicts=initrd-cleanup.service --property Before=initrd-cleanup.service --on-active=$env{FIND_MULTIPATHS_WAIT_UNTIL} @SYSDIR_BIN@/udevadm trigger --action=add $sys$devpath"
 +RUN+="/usr/bin/systemd-run --unit=cancel-multipath-wait-$kernel --description 'cancel waiting for multipath siblings of $kernel' --no-block --timer-property DefaultDependencies=no --timer-property Conflicts=shutdown.target --timer-property Before=shutdown.target --timer-property Conflicts=initrd-cleanup.service --timer-property Before=initrd-cleanup.service --timer-property AccuracySec=500ms --property DefaultDependencies=no --property Conflicts=shutdown.target --property Before=shutdown.target --property Conflicts=initrd-cleanup.service --property Before=initrd-cleanup.service --on-active=$env{FIND_MULTIPATHS_WAIT_UNTIL} /sbin/udevadm trigger --action=add $sys$devpath"
  
  LABEL="pretend_mpath"
  ENV{DM_MULTIPATH_DEVICE_PATH}="1"
-@@ -88,7 +88,7 @@ ENV{FIND_MULTIPATHS_WAIT_UNTIL}!="?*", G
+@@ -85,7 +85,7 @@ ENV{FIND_MULTIPATHS_WAIT_UNTIL}!="?*", G
  ENV{FIND_MULTIPATHS_WAIT_UNTIL}=="0", GOTO="end_mpath"
  
  ENV{FIND_MULTIPATHS_WAIT_CANCELLED}="1"
--RUN+="/usr/bin/systemctl stop cancel-multipath-wait-$kernel.timer"
+-RUN+="@SYSDIR_BIN@/systemctl stop cancel-multipath-wait-$kernel.timer"
 +RUN+="/bin/systemctl stop cancel-multipath-wait-$kernel.timer"
  
  # If "multipath -u" failed, no values are imported from the program,

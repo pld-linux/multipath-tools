@@ -1,5 +1,5 @@
---- multipath-tools-0.8.8/kpartx/kpartx.rules.orig	2021-12-06 07:42:30.000000000 +0100
-+++ multipath-tools-0.8.8/kpartx/kpartx.rules	2022-02-19 20:33:03.368502706 +0100
+--- multipath-tools-0.10.0/kpartx/kpartx.rules.in.orig	2024-08-27 02:48:08.000000000 +0200
++++ multipath-tools-0.10.0/kpartx/kpartx.rules.in	2024-10-06 09:05:53.894147864 +0200
 @@ -9,6 +9,9 @@ ACTION!="add|change", GOTO="kpartx_end"
  ENV{DM_UUID}!="?*", GOTO="kpartx_end"
  ENV{DM_UDEV_DISABLE_OTHER_RULES_FLAG}=="1", GOTO="kpartx_end"
@@ -10,11 +10,11 @@
  # Create dm tables for partitions on multipath devices.
  ENV{DM_UUID}!="mpath-?*", GOTO="mpath_kpartx_end"
  
-@@ -36,6 +39,6 @@ LABEL="mpath_kpartx_end"
+@@ -39,6 +42,6 @@ LABEL="mpath_kpartx_end"
  GOTO="kpartx_end"
  
  LABEL="run_kpartx"
--RUN+="/sbin/kpartx -un -p -part /dev/$name"
-+RUN+="/sbin/kpartx -un /dev/$name"
+-RUN+="@BINDIR@/kpartx -un -p -part /dev/$name"
++RUN+="@BINDIR@/kpartx -un /dev/$name"
  
  LABEL="kpartx_end"

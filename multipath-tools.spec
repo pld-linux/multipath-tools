@@ -1,18 +1,18 @@
 #
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
-%bcond_with	systemd		# systemd
+%bcond_without	systemd		# systemd support
 
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.9.5
+Version:	0.10.0
 Release:	1
 License:	GPL v2
 Group:		Base
 #Source0Download: https://github.com/opensvc/multipath-tools/tags
 Source0:	https://github.com/opensvc/multipath-tools/archive/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	4a2bb51973e962d653578063a6da14e9
+# Source0-md5:	025586178f9daedc857bc13a36963bb1
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -28,6 +28,7 @@ URL:		http://christophe.varoqui.free.fr/
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	json-c-devel
 BuildRequires:	libaio-devel
+BuildRequires:	libmount-devel
 BuildRequires:	linux-libc-headers >= 7:2.6.12.0-5
 BuildRequires:	pkgconfig
 BuildRequires:	readline-devel
@@ -209,6 +210,7 @@ fi
 /lib/udev/rules.d/11-dm-mpath.rules
 /lib/udev/rules.d/11-dm-parts.rules
 /lib/udev/rules.d/56-multipath.rules
+/lib/udev/rules.d/99-z-dm-mpath-late.rules
 # TODO: package for systemd?
 #/usr/lib/modules-load.d/multipath.conf
 %if %{with systemd}
