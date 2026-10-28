@@ -2,17 +2,18 @@
 # Conditional build:
 %bcond_with	initrd		# build initrd version (very broken)
 %bcond_without	systemd		# systemd support
+%bcond_without	tests		# unit tests
 
 Summary:	Tools to manage multipathed devices with the device-mapper
 Summary(pl.UTF-8):	Implementacja wielotrasowego dostępu do zasobów przy użyciu device-mappera
 Name:		multipath-tools
-Version:	0.10.0
+Version:	0.15.1
 Release:	1
 License:	GPL v2
 Group:		Base
 #Source0Download: https://github.com/opensvc/multipath-tools/tags
 Source0:	https://github.com/opensvc/multipath-tools/archive/%{version}/%{name}-%{version}.tar.gz
-# Source0-md5:	025586178f9daedc857bc13a36963bb1
+# Source0-md5:	c0c95b99342f40815ee62e46a4e2b471
 Source100:	branch.sh
 Source1:	multipathd.init
 Source2:	multipathd.sysconfig
@@ -25,13 +26,13 @@ Patch2:		config.patch
 Patch3:		%{name}-prototype.patch
 Patch4:		%{name}-types.patch
 URL:		http://christophe.varoqui.free.fr/
+%{?with_tests:BuildRequires:	cmocka-devel}
 BuildRequires:	device-mapper-devel >= 1.02.08
 BuildRequires:	json-c-devel
 BuildRequires:	libaio-devel
 BuildRequires:	libmount-devel
 BuildRequires:	linux-libc-headers >= 7:2.6.12.0-5
 BuildRequires:	pkgconfig
-BuildRequires:	readline-devel
 BuildRequires:	rpmbuild(macros) >= 1.647
 BuildRequires:	sed >= 4.0
 %{?with_systemd:BuildRequires:	systemd-devel >= 1:209}
@@ -135,11 +136,21 @@ cp -p %{SOURCE4} .
 %{__make} clean
 %endif
 
+LDFLAGS="%{rpmldflags}" \
 %{__make} -j1 \
 	CC="%{__cc}" \
 	LIB=%{_lib} \
 	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
 	V=1
+
+%if %{with tests}
+LDFLAGS="%{rpmldflags}" \
+%{__make} -j1 test \
+	CC="%{__cc}" \
+	LIB=%{_lib} \
+	OPTFLAGS="%{rpmcflags} %{rpmcppflags} -Wall -Wunused -Wstrict-prototypes %{?debug:-DDEBUG=1}" \
+	V=1
+%endif
 
 %install
 rm -rf $RPM_BUILD_ROOT
@@ -215,6 +226,7 @@ fi
 #/usr/lib/modules-load.d/multipath.conf
 %if %{with systemd}
 %{systemdunitdir}/multipathd.service
+%{systemdunitdir}/multipathd-queueing.service
 %{systemdunitdir}/multipathd.socket
 %endif
 %{systemdtmpfilesdir}/multipath.conf
