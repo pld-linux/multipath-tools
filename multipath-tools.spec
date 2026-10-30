@@ -1,6 +1,6 @@
 #
 # Conditional build:
-%bcond_with	initrd		# build initrd version (very broken)
+%bcond_with	initrd		# initrd version (very broken)
 %bcond_without	systemd		# systemd support
 %bcond_without	tests		# unit tests
 
@@ -44,16 +44,18 @@ BuildRequires:	klibc-static
 %endif
 Requires(post,preun):	/sbin/chkconfig
 Requires(post,preun,postun):	systemd-units >= 38
-Requires:	%{name}-libs = %{version}-%{release}
+Requires:	%{name}-libs%{?_isa} = %{version}-%{release}
 Requires:	device-mapper >= 1.02.08
-Requires:	kpartx = %{version}-%{release}
-Requires:	libaio >= 0.3.106-2
+Requires:	kpartx%{?_isa} = %{version}-%{release}
+Requires:	libaio%{?_isa} >= 0.3.106-2
 Requires:	rc-scripts
 Requires:	systemd-units >= 38
 Requires:	udev-core >= 1:127
 BuildRoot:	%{tmpdir}/%{name}-%{version}-root-%(id -u -n)
 
 %define		_sbindir	/sbin
+# uses asserts to check return values from libc functions
+%define		filterout_cpp	-DNDEBUG
 
 %description
 multipath-tools provides the tools to manage multipathed devices by
@@ -79,7 +81,7 @@ device-mappera. Narzędzia to:
 Summary:	Shared libraries for multipath-tools
 Summary(pl.UTF-8):	Biblioteki współdzielone multipath-tools
 Group:		Libraries
-Requires:	device-mapper-libs >= 1.02.08
+Requires:	device-mapper-libs%{?_isa} >= 1.02.08
 
 %description libs
 Shared libraries for multipath-tools.
@@ -91,7 +93,7 @@ Biblioteki współdzielone multipath-tools.
 Summary:	Header files for multipath-tools libraries
 Summary(pl.UTF-8):	Pliki nagłówkowe bibliotek multipath-tools
 Group:		Development/Libraries
-Requires:	%{name}-libs = %{version}-%{release}
+Requires:	%{name}-libs%{?_isa} = %{version}-%{release}
 
 %description devel
 Header files for multipath-tools libraries.
@@ -103,7 +105,7 @@ Pliki nagłówkowe bibliotek multipath-tools.
 Summary:	Partition device manager for device-mapper devices
 Summary(pl.UTF-8):	Zarządca urządzeń partycji dla urządzeń device-mappera
 Group:		Base
-Requires:	device-mapper-libs >= 1.02.08
+Requires:	device-mapper-libs%{?_isa} >= 1.02.08
 Conflicts:	udev-core < 1:127
 
 %description -n kpartx
@@ -238,21 +240,21 @@ fi
 
 %files libs
 %defattr(644,root,root,755)
-%attr(755,root,root) /%{_lib}/libmpathcmd.so.0
-%attr(755,root,root) /%{_lib}/libmpathpersist.so.0
-%attr(755,root,root) /%{_lib}/libmpathutil.so.0
-%attr(755,root,root) /%{_lib}/libmpathvalid.so.0
-%attr(755,root,root) /%{_lib}/libmultipath.so.0
-%attr(755,root,root) %{_libdir}/libdmmp.so.0.2.0
+/%{_lib}/libmpathcmd.so.0
+/%{_lib}/libmpathpersist.so.0
+/%{_lib}/libmpathutil.so.0
+/%{_lib}/libmpathvalid.so.0
+/%{_lib}/libmultipath.so.0
+%{_libdir}/libdmmp.so.0.2.0
 
 %files devel
 %defattr(644,root,root,755)
-%attr(755,root,root) %{_libdir}/libdmmp.so
-%attr(755,root,root) %{_libdir}/libmpathcmd.so
-%attr(755,root,root) %{_libdir}/libmpathpersist.so
-%attr(755,root,root) %{_libdir}/libmpathutil.so
-%attr(755,root,root) %{_libdir}/libmpathvalid.so
-%attr(755,root,root) %{_libdir}/libmultipath.so
+%{_libdir}/libdmmp.so
+%{_libdir}/libmpathcmd.so
+%{_libdir}/libmpathpersist.so
+%{_libdir}/libmpathutil.so
+%{_libdir}/libmpathvalid.so
+%{_libdir}/libmultipath.so
 %{_includedir}/libdmmp
 %{_includedir}/mpath_cmd.h
 %{_includedir}/mpath_persist.h
